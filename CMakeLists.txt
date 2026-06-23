@@ -37,6 +37,7 @@ add_executable(fmtpp
   src/CSharpFormatter.cpp
   src/StyleDetector.cpp
   src/ThreadPool.cpp
+  src/TuiConfigurator.cpp
 )
 
 target_include_directories(fmtpp PRIVATE

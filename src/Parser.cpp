@@ -1,6 +1,7 @@
 #include "fmtpp/Parser.hpp"
 #include "fmtpp/SourceBuffer.hpp"
 #include "fmtpp/ASTNodeFactory.hpp"
+#include "fmtpp/MemoryPool.hpp"
 #include "fmtpp/ast/ProgramNode.hpp"
 #include "fmtpp/ast/VariableDeclNode.hpp"
 #include "fmtpp/ast/LiteralNode.hpp"
@@ -32,6 +33,12 @@ ProgramNode* Parser::parse(const char* source, size_t len)
     if (source == NULL || len == 0)
     {
         return NULL;
+    }
+
+    // Reset the memory pool for this parse
+    if (g_pool != NULL)
+    {
+        g_pool->reset();
     }
 
     /* Fallback: create a minimal AST for testing                     */
