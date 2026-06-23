@@ -1,0 +1,54 @@
+{
+  "name": "fmtpp",
+  "version": "0.1.0",
+  "description": "A professional, leak-free code formatter for JS, TS, Java, C, C++, C#, Go, and Rust",
+  "main": "fmtpp.js",
+  "bin": {
+    "fmtpp": "./fmtpp.js"
+  },
+  "files": [
+    "fmtpp.js",
+    "install.js",
+    "bin/"
+  ],
+  "scripts": {
+    "postinstall": "node install.js",
+    "test": "node -e \"require('./fmtpp.js')\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fmtpp/fmtpp"
+  },
+  "keywords": [
+    "formatter",
+    "code-formatter",
+    "prettier",
+    "beautifier",
+    "javascript",
+    "typescript",
+    "java",
+    "c",
+    "cpp",
+    "csharp",
+    "go",
+    "rust",
+    "fmtpp"
+  ],
+  "author": "fmtpp contributors",
+  "license": "MIT",
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
