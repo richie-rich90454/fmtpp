@@ -3,6 +3,7 @@
 #include "fmtpp/TuiConfigurator.hpp"
 #include "fmtpp/StyleDetector.hpp"
 #include "fmtpp/ThreadPool.hpp"
+#include "fmtpp/Benchmark.hpp"
 #include "fmtpp/SourceBuffer.hpp"
 #include "fmtpp/Parser.hpp"
 #include "fmtpp/OutputBuffer.hpp"
@@ -58,6 +59,10 @@ int FormatterApp::run(int argc, const char* argv[])
     {
         result = runFormat(argc, argv);
     }
+    else if (std::strcmp(argv[1], "--benchmark") == 0 || std::strcmp(argv[1], "benchmark") == 0)
+    {
+        result = runBenchmark(argc, argv);
+    }
     else if (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)
     {
         printUsage();
@@ -83,6 +88,7 @@ void FormatterApp::printUsage()
     printf("  --config, config  Launch interactive TUI configurator\n");
     printf("  --learn [FILE]    Learn style from a file and generate .fmtpp.toml\n");
     printf("  --format FILE...  Format one or more files\n");
+    printf("  --benchmark FILE  Run performance benchmark\n");
     printf("  FILE              Format a single file\n");
     printf("\nSupported languages: js, ts, java, c, cpp, cs, go, rust\n");
     printf("\nEaster egg: fmtpp - formatting code with style and zero leaks\n");
@@ -302,6 +308,40 @@ int FormatterApp::runFormatSingle(const char* filepath)
     }
 
     return 1;
+}
+
+int FormatterApp::runBenchmark(int argc, const char* argv[])
+{
+    if (argc < 3)
+    {
+        printf("Usage: %s --benchmark <file...>\n", m_programName.c_str());
+        return 1;
+    }
+
+    Benchmark::Config benchConfig;
+    benchConfig.iterations = 10;
+    benchConfig.warmup = true;
+    benchConfig.verbose = true;
+    benchConfig.language = detectLanguage(argv[2]);
+
+    int i;
+    for (i = 2; i < argc; i++)
+    {
+        benchConfig.files.push_back(argv[i]);
+    }
+
+    printf("fmtpp Benchmark\n");
+    printf("  Files: %d\n", static_cast<int>(benchConfig.files.size()));
+    printf("  Iterations: %d\n", benchConfig.iterations);
+    printf("  Language: %s\n", benchConfig.language.c_str());
+    printf("  Warmup: %s\n", benchConfig.warmup ? "yes" : "no");
+    printf("Easter egg: the benchmarker is warming up...\n");
+
+    Benchmark bench;
+    Benchmark::Result result = bench.run(benchConfig);
+    bench.printReport(result);
+
+    return 0;
 }
 
 std::string FormatterApp::detectLanguage(const char* filepath)

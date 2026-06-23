@@ -46,6 +46,9 @@ private:
     /** Formats one or more files. */
     int runFormat(int argc, const char* argv[]);
 
+    /** Runs a performance benchmark. */
+    int runBenchmark(int argc, const char* argv[]);
+
     /** Formats a single file and prints to stdout. */
     int runFormatSingle(const char* filepath);
 
