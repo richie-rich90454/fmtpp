@@ -35,6 +35,8 @@ add_executable(fmtpp
   src/TSFormatter.cpp
   src/CppFormatter.cpp
   src/CSharpFormatter.cpp
+  src/StyleDetector.cpp
+  src/ThreadPool.cpp
 )
 
 target_include_directories(fmtpp PRIVATE
