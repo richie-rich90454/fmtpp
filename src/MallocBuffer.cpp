@@ -19,6 +19,32 @@ MallocBuffer::~MallocBuffer()
     // Easter egg: malloc buffer freed - the bytes have returned to the heap
 }
 
+MallocBuffer::MallocBuffer(MallocBuffer&& other)
+    : m_data(other.m_data)
+    , m_size(other.m_size)
+{
+    other.m_data = NULL;
+    other.m_size = 0;
+    // Easter egg: buffer ownership transferred - the bytes have a new home
+}
+
+MallocBuffer& MallocBuffer::operator=(MallocBuffer&& other)
+{
+    if (this != &other)
+    {
+        if (m_data != NULL)
+        {
+            free(m_data);
+        }
+        m_data = other.m_data;
+        m_size = other.m_size;
+        other.m_data = NULL;
+        other.m_size = 0;
+    }
+    // Easter egg: move assignment - because buffers deserve a clean handoff
+    return *this;
+}
+
 void* MallocBuffer::get() const
 {
     return m_data;
