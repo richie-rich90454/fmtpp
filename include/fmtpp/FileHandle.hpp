@@ -4,7 +4,7 @@
 /**
  * RAII wrapper for FILE* handles.
  * Opens a file with fopen in the constructor and closes in the destructor.
- * Non-copyable.
+ * Non-copyable but movable.
  *
  * Easter egg: the file handle - opening and closing files since 1972
  */
@@ -21,9 +21,20 @@ public:
     /** Closes the file handle. */
     ~FileHandle();
 
-    // Non-copyable
-    FileHandle(const FileHandle& other);
-    FileHandle& operator=(const FileHandle& other);
+    /**
+     * Move constructor.
+     * Transfers ownership of the FILE* from the other handle.
+     * @param other Source handle to move from.
+     */
+    FileHandle(FileHandle&& other);
+
+    /**
+     * Move assignment.
+     * Transfers ownership of the FILE* from the other handle.
+     * @param other Source handle to move from.
+     * @return Reference to this handle.
+     */
+    FileHandle& operator=(FileHandle&& other);
 
     /** Returns the underlying FILE pointer. */
     FILE* get() const;
@@ -32,5 +43,10 @@ public:
     bool isValid() const;
 
 private:
+    // Non-copyable
+    FileHandle(const FileHandle& other);
+    FileHandle& operator=(const FileHandle& other);
+
+    /** Underlying FILE pointer (NULL if no file is open). */
     FILE* m_file;
 };
