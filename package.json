@@ -1,0 +1,39 @@
+{
+  "name": "fmtpp",
+  "version": "0.1.0",
+  "description": "A professional code formatter for JS, TS, Java, C, C++, C#, Go, and Rust",
+  "main": "index.js",
+  "bin": {
+    "fmtpp": "./index.js"
+  },
+  "scripts": {
+    "test": "node tests/test_npm_packaging.js"
+  },
+  "keywords": [
+    "formatter",
+    "prettier",
+    "javascript",
+    "typescript",
+    "java",
+    "c",
+    "cpp",
+    "csharp",
+    "go",
+    "rust"
+  ],
+  "author": "fmtpp contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fmtpp/fmtpp"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "index.js",
+    "npm/",
+    "scripts/"
+  ],
+  "//": "Easter egg: this package.json is the bridge between JavaScript and native formatting magic"
+}
