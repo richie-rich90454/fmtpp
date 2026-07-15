@@ -4,7 +4,7 @@
 /**
  * RAII wrapper for memory-mapped file regions.
  * Uses mmap on POSIX and CreateFileMapping/MapViewOfFile on Windows.
- * Non-copyable.
+ * Non-copyable but movable.
  *
  * Easter egg: the mmap region - mapping files to memory since virtual memory was invented
  */
@@ -20,9 +20,20 @@ public:
     /** Unmaps the region. */
     ~MmapRegion();
 
-    // Non-copyable
-    MmapRegion(const MmapRegion& other);
-    MmapRegion& operator=(const MmapRegion& other);
+    /**
+     * Move constructor.
+     * Transfers ownership of the mapped region.
+     * @param other Source region to move from.
+     */
+    MmapRegion(MmapRegion&& other);
+
+    /**
+     * Move assignment.
+     * Transfers ownership of the mapped region.
+     * @param other Source region to move from.
+     * @return Reference to this region.
+     */
+    MmapRegion& operator=(MmapRegion&& other);
 
     /** Returns a pointer to the mapped data. */
     const void* getData() const;
@@ -34,13 +45,27 @@ public:
     bool isValid() const;
 
 private:
+    // Non-copyable
+    MmapRegion(const MmapRegion& other);
+    MmapRegion& operator=(const MmapRegion& other);
+
+    /** Pointer to the mapped data (NULL if mapping failed). */
     void* m_data;
+
+    /** Size of the mapped region in bytes. */
     size_t m_size;
+
+    /** True when the mapping is valid. */
     bool m_isValid;
+
 #ifdef _WIN32
+    /** Windows file handle (NULL on POSIX). */
     void* m_fileHandle;
+
+    /** Windows file mapping handle (NULL on POSIX). */
     void* m_mapHandle;
 #else
+    /** POSIX file descriptor (-1 on Windows). */
     int m_fd;
 #endif
 };

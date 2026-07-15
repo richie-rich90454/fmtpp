@@ -63,6 +63,52 @@ MmapRegion::~MmapRegion()
     // Easter egg: memory unmapped - the OS can have its pages back
 }
 
+MmapRegion::MmapRegion(MmapRegion&& other)
+    : m_data(other.m_data)
+    , m_size(other.m_size)
+    , m_isValid(other.m_isValid)
+    , m_fileHandle(other.m_fileHandle)
+    , m_mapHandle(other.m_mapHandle)
+{
+    other.m_data = NULL;
+    other.m_size = 0;
+    other.m_isValid = false;
+    other.m_fileHandle = NULL;
+    other.m_mapHandle = NULL;
+    // Easter egg: region ownership transferred - the pages have a new caretaker
+}
+
+MmapRegion& MmapRegion::operator=(MmapRegion&& other)
+{
+    if (this != &other)
+    {
+        if (m_data != NULL)
+        {
+            UnmapViewOfFile(m_data);
+        }
+        if (m_mapHandle != NULL)
+        {
+            CloseHandle(m_mapHandle);
+        }
+        if (m_fileHandle != NULL)
+        {
+            CloseHandle(m_fileHandle);
+        }
+        m_data = other.m_data;
+        m_size = other.m_size;
+        m_isValid = other.m_isValid;
+        m_fileHandle = other.m_fileHandle;
+        m_mapHandle = other.m_mapHandle;
+        other.m_data = NULL;
+        other.m_size = 0;
+        other.m_isValid = false;
+        other.m_fileHandle = NULL;
+        other.m_mapHandle = NULL;
+    }
+    // Easter egg: move assignment - mapped memory gets a new address book
+    return *this;
+}
+
 #else
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -108,6 +154,44 @@ MmapRegion::~MmapRegion()
         m_fd = -1;
     }
     // Easter egg: memory unmapped - the OS can have its pages back
+}
+
+MmapRegion::MmapRegion(MmapRegion&& other)
+    : m_data(other.m_data)
+    , m_size(other.m_size)
+    , m_isValid(other.m_isValid)
+    , m_fd(other.m_fd)
+{
+    other.m_data = NULL;
+    other.m_size = 0;
+    other.m_isValid = false;
+    other.m_fd = -1;
+    // Easter egg: region ownership transferred - the pages have a new caretaker
+}
+
+MmapRegion& MmapRegion::operator=(MmapRegion&& other)
+{
+    if (this != &other)
+    {
+        if (m_data != NULL)
+        {
+            munmap(m_data, m_size);
+        }
+        if (m_fd >= 0)
+        {
+            close(m_fd);
+        }
+        m_data = other.m_data;
+        m_size = other.m_size;
+        m_isValid = other.m_isValid;
+        m_fd = other.m_fd;
+        other.m_data = NULL;
+        other.m_size = 0;
+        other.m_isValid = false;
+        other.m_fd = -1;
+    }
+    // Easter egg: move assignment - mapped memory gets a new address book
+    return *this;
 }
 #endif
 
