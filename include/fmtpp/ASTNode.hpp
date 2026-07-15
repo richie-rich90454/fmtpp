@@ -22,4 +22,25 @@ public:
      * @param visitor The ASTVisitor to accept.
      */
     virtual void accept(ASTVisitor& visitor) = 0;
+
+    /**
+     * Allocates memory for an ASTNode subclass from the global MemoryPool.
+     * @param size Number of bytes to allocate.
+     * @return Pointer to allocated memory, or NULL if the pool is exhausted.
+     */
+    static void* operator new(size_t size);
+
+    /**
+     * Placement new overload for factory-created nodes.
+     * @param size Number of bytes to allocate (ignored).
+     * @param ptr Pre-allocated memory from the global MemoryPool.
+     * @return The same ptr value.
+     */
+    static void* operator new(size_t size, void* ptr);
+
+    /**
+     * No-op delete: individual AST nodes are freed by pool reset/destruction.
+     * @param ptr Pointer to deallocate (ignored).
+     */
+    static void operator delete(void* ptr);
 };
