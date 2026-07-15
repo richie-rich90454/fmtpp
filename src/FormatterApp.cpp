@@ -47,6 +47,18 @@ int FormatterApp::run(int argc, const char* argv[])
     {
         printEasterEgg();
     }
+    else if (std::strcmp(argv[1], "--cowbell") == 0)
+    {
+        printCowbell();
+    }
+    else if (std::strcmp(argv[1], "--kittens") == 0)
+    {
+        printKittens();
+    }
+    else if (std::strcmp(argv[1], "--unicorn") == 0)
+    {
+        printUnicorn();
+    }
     else if (std::strcmp(argv[1], "--config") == 0 || std::strcmp(argv[1], "config") == 0)
     {
         result = runConfigurator();
@@ -106,6 +118,31 @@ void FormatterApp::printEasterEgg()
     std::srand(static_cast<unsigned int>(std::time(NULL)));
     int index = std::rand() % g_easterEggCount;
     printf("%s\n", g_easterEggs[index]);
+}
+
+void FormatterApp::printCowbell()
+{
+    // Easter egg: the legendary cowbell, hidden in plain sight
+    printf("More cowbell!\n");
+}
+
+void FormatterApp::printKittens()
+{
+    // Easter egg: ASCII art kittens for the brave formatter explorer
+    printf(" /\\_/\\\n");
+    printf("( o.o )\n");
+    printf(" > ^ <\n");
+    printf("Meow! Kittens approve of your formatting.\n");
+}
+
+void FormatterApp::printUnicorn()
+{
+    // Easter egg: a majestic ASCII unicorn guarding the formatter
+    printf("    \\   /\\\n");
+    printf("     )  ( ')\n");
+    printf("    (  /  )\n");
+    printf("     \\(__)|\n");
+    printf("Neigh! The formatting unicorn has blessed your code.\n");
 }
 
 int FormatterApp::runConfigurator()

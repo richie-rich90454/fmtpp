@@ -37,6 +37,15 @@ private:
     /** Prints a random easter egg to stdout. */
     void printEasterEgg(); // Easter egg
 
+    /** Prints the hidden cowbell easter egg. */
+    void printCowbell(); // Easter egg
+
+    /** Prints the hidden kittens easter egg. */
+    void printKittens(); // Easter egg
+
+    /** Prints the hidden unicorn easter egg. */
+    void printUnicorn(); // Easter egg
+
     /** Launches the interactive TUI configurator. */
     int runConfigurator();
 
