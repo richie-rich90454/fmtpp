@@ -46,6 +46,21 @@ struct Config
     /** Space around binary operators. Default: true */
     bool spaceAroundOperators;
 
+    /** Wrap prose in markdown files. Default: "preserve" */
+    std::string proseWrap;
+
+    /** HTML whitespace sensitivity. Default: "css" */
+    std::string htmlWhitespaceSensitivity;
+
+    /** Indent script and style tags in Vue files. Default: false */
+    bool vueIndentScriptAndStyle;
+
+    /** Format embedded code in markdown/template files. Default: "auto" */
+    std::string embeddedLanguageFormatting;
+
+    /** Put each attribute on its own line in HTML/JSX. Default: false */
+    bool singleAttributePerLine;
+
     /** Constructs a Config with default values (matching Prettier). */
     Config();
 

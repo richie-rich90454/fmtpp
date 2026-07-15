@@ -14,6 +14,11 @@ Config::Config()
     , spaceBeforeBrace(true)
     , spaceAfterKeyword(true)
     , spaceAroundOperators(true)
+    , proseWrap("preserve")
+    , htmlWhitespaceSensitivity("css")
+    , vueIndentScriptAndStyle(false)
+    , embeddedLanguageFormatting("auto")
+    , singleAttributePerLine(false)
 {
     // Easter egg: the config is the soul of the formatter, and it has just been born
 }
