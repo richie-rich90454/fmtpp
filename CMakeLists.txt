@@ -67,6 +67,7 @@ add_library(fmtpp_static STATIC ${FMTPP_SOURCES})
 set_source_files_properties(
   src/ConfigBuilder.cpp
   src/StyleDetector.cpp
+  src/TuiConfigurator.cpp
   PROPERTIES COMPILE_OPTIONS "-std=c++17"
 )
 
