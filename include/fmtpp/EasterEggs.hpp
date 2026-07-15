@@ -101,9 +101,7 @@ static const char* g_easterEggs[] = {
     "We format code like it's a haiku. Concise. Beautiful. Meaningful.",
     "The memory pool: where allocation is just addition.",
     "No garbage collector needed. We handle our own trash.",
-    "This formatter is the Marie Kondo of code. Does this brace spark joy?",
-    "Finally, a formatter that doesn't make you choose between speed and correctness.",
-    "Your code. Our formatting. Perfection."
+    "This formatter is the Marie Kondo of code. Does this brace spark joy?"
 };
 
 static const int g_easterEggCount = sizeof(g_easterEggs) / sizeof(g_easterEggs[0]);
