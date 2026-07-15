@@ -30,3 +30,10 @@ void ASTNode::operator delete(void* ptr)
     // Easter egg: delete is a no-op; the pool reclaims everything in one fell swoop
     (void)ptr;
 }
+
+void ASTNode::operator delete(void* ptr, size_t size)
+{
+    // Easter egg: sized delete is also a no-op; the pool does not care about size
+    (void)ptr;
+    (void)size;
+}

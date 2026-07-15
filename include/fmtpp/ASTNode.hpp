@@ -43,4 +43,12 @@ public:
      * @param ptr Pointer to deallocate (ignored).
      */
     static void operator delete(void* ptr);
+
+    /**
+     * Sized no-op delete for C++14 sized deallocation.
+     * Individual AST nodes are freed by pool reset/destruction.
+     * @param ptr Pointer to deallocate (ignored).
+     * @param size Size of the allocation (ignored).
+     */
+    static void operator delete(void* ptr, size_t size);
 };
