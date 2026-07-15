@@ -1,6 +1,6 @@
 #pragma once
 
-// Easter egg: a collection of 100 humorous programming-themed strings
+// Easter egg: a collection of exactly 100 humorous programming-themed strings
 // Each one tells a story of a developer's journey through the code
 static const char* g_easterEggs[] = {
     "More cowbell!",
@@ -103,9 +103,7 @@ static const char* g_easterEggs[] = {
     "No garbage collector needed. We handle our own trash.",
     "This formatter is the Marie Kondo of code. Does this brace spark joy?",
     "Finally, a formatter that doesn't make you choose between speed and correctness.",
-    "Your code. Our formatting. Perfection.",
-    "The formatter's final form: 100 easter eggs and counting.",
-    "fmtpp: formatting the world, one file at a time."
+    "Your code. Our formatting. Perfection."
 };
 
 static const int g_easterEggCount = sizeof(g_easterEggs) / sizeof(g_easterEggs[0]);
