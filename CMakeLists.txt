@@ -8,6 +8,13 @@ set(CMAKE_CXX_EXTENSIONS ON)
 # C++11 for threading support and third-party dependencies
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-std=c++11>)
 
+# Optional undefined-behavior sanitizer for QA (phase 23)
+option(FMTPP_SANITIZE_UB "Build with undefined behavior sanitizer" OFF)
+if(FMTPP_SANITIZE_UB)
+    add_compile_options(-fsanitize=undefined)
+    add_link_options(-fsanitize=undefined)
+endif()
+
 # Third-party dependencies via FetchContent
 include(FetchContent)
 
