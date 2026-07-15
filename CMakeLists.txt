@@ -14,6 +14,7 @@ include(FetchContent)
 # Local source mirrors are used when network FetchContent is unavailable;
 # set FETCHCONTENT_SOURCE_DIR_<NAME> to override with a different path.
 set(FETCHCONTENT_SOURCE_DIR_CLI11 ${CMAKE_SOURCE_DIR}/lib/cli11 CACHE PATH "CLI11 source directory")
+set(FETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS ${CMAKE_SOURCE_DIR}/lib/tomlplusplus CACHE PATH "toml++ source directory")
 
 FetchContent_Declare(
     cli11
@@ -21,6 +22,13 @@ FetchContent_Declare(
     GIT_TAG v2.4.2
 )
 FetchContent_MakeAvailable(cli11)
+
+FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG v3.4.0
+)
+FetchContent_MakeAvailable(tomlplusplus)
 
 set(FMTPP_SOURCES
   src/FormatterApp.cpp
@@ -59,7 +67,7 @@ target_include_directories(fmtpp_static PUBLIC
   ${CMAKE_SOURCE_DIR}/include
 )
 
-target_link_libraries(fmtpp_static PUBLIC CLI11::CLI11)
+target_link_libraries(fmtpp_static PUBLIC CLI11::CLI11 tomlplusplus::tomlplusplus)
 
 # Build pragma message displayed at compile time
 target_compile_options(fmtpp_static PUBLIC
