@@ -50,16 +50,16 @@ private:
     int runConfigurator();
 
     /** Runs the style learning command. */
-    int runLearn(int argc, const char* argv[]);
+    int runLearn(const std::string& sourceFile, const std::string& outputFile);
 
     /** Formats one or more files. */
-    int runFormat(int argc, const char* argv[]);
+    int runFormat(const std::vector<std::string>& files);
 
     /** Runs a performance benchmark. */
-    int runBenchmark(int argc, const char* argv[]);
+    int runBenchmark(const std::vector<std::string>& files, int runs, const std::string& compareTool);
 
     /** Formats a single file and prints to stdout. */
-    int runFormatSingle(const char* filepath);
+    int runFormatSingle(const std::string& filepath);
 
     /**
      * Detects the language from a file extension.

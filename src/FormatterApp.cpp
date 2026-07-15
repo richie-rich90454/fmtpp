@@ -16,6 +16,7 @@
 #include "fmtpp/CSharpFormatter.hpp"
 #include "fmtpp/GoFormatter.hpp"
 #include "fmtpp/RustFormatter.hpp"
+#include "CLI/CLI.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -30,63 +31,98 @@ FormatterApp::FormatterApp()
 
 int FormatterApp::run(int argc, const char* argv[])
 {
-    int result = 0;
+    CLI::App app("fmtpp v" + m_version + " - A professional code formatter", m_programName);
+    app.set_version_flag("--version,-v", std::string("fmtpp ") + m_version);
+    app.set_help_flag("--help,-h", "Print this help message");
 
-    if (argc < 2)
+    bool easterEgg = false;
+    bool cowbell = false;
+    bool kittens = false;
+    bool unicorn = false;
+
+    app.add_flag("--easter-egg", easterEgg, "Print a random easter egg")->group("");
+    app.add_flag("--cowbell", cowbell, "More cowbell!")->group("");
+    app.add_flag("--kittens", kittens, "Print ASCII kitten art")->group("");
+    app.add_flag("--unicorn", unicorn, "Print ASCII unicorn art")->group("");
+
+    std::vector<std::string> directFiles;
+    app.add_option("files", directFiles, "Format a single file directly");
+
+    CLI::App* formatCmd = app.add_subcommand("format", "Format one or more files");
+    std::vector<std::string> formatFiles;
+    formatCmd->add_option("files", formatFiles, "Files to format")->required();
+
+    CLI::App* benchCmd = app.add_subcommand("bench", "Run performance benchmark");
+    std::vector<std::string> benchFiles;
+    int benchRuns = 10;
+    std::string compareTool;
+    benchCmd->add_option("files", benchFiles, "Files to benchmark")->required();
+    benchCmd->add_option("--runs", benchRuns, "Number of iterations");
+    benchCmd->add_option("--compare", compareTool, "External formatter to compare (oxfmt, prettier)");
+
+    CLI::App* configCmd = app.add_subcommand("config", "Launch interactive TUI configurator");
+    (void)configCmd;
+
+    CLI::App* learnCmd = app.add_subcommand("learn", "Learn style from a file and generate .fmtpp.toml");
+    std::string learnFile;
+    std::string learnOutput = ".fmtpp.toml";
+    learnCmd->add_option("file", learnFile, "Source file to learn from")->required();
+    learnCmd->add_option("--output", learnOutput, "Output config file path");
+
+    try
     {
-        printUsage();
-        goto cleanup;
+        app.parse(argc, argv);
+    }
+    catch (const CLI::ParseError& e)
+    {
+        return app.exit(e);
     }
 
-    // Easter egg: manual argument parsing - old school style
-    if (std::strcmp(argv[1], "--version") == 0 || std::strcmp(argv[1], "-v") == 0)
-    {
-        printVersion();
-    }
-    else if (std::strcmp(argv[1], "--easter-egg") == 0)
+    if (easterEgg)
     {
         printEasterEgg();
+        return 0;
     }
-    else if (std::strcmp(argv[1], "--cowbell") == 0)
+    if (cowbell)
     {
         printCowbell();
+        return 0;
     }
-    else if (std::strcmp(argv[1], "--kittens") == 0)
+    if (kittens)
     {
         printKittens();
+        return 0;
     }
-    else if (std::strcmp(argv[1], "--unicorn") == 0)
+    if (unicorn)
     {
         printUnicorn();
-    }
-    else if (std::strcmp(argv[1], "--config") == 0 || std::strcmp(argv[1], "config") == 0)
-    {
-        result = runConfigurator();
-    }
-    else if (std::strcmp(argv[1], "--learn") == 0 || std::strcmp(argv[1], "learn") == 0)
-    {
-        result = runLearn(argc, argv);
-    }
-    else if (std::strcmp(argv[1], "--format") == 0 || std::strcmp(argv[1], "format") == 0)
-    {
-        result = runFormat(argc, argv);
-    }
-    else if (std::strcmp(argv[1], "--benchmark") == 0 || std::strcmp(argv[1], "benchmark") == 0)
-    {
-        result = runBenchmark(argc, argv);
-    }
-    else if (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)
-    {
-        printUsage();
-    }
-    else
-    {
-        // Assume it's a file to format
-        result = runFormatSingle(argv[1]);
+        return 0;
     }
 
-cleanup:
-    return result;
+    if (app.got_subcommand("format"))
+    {
+        return runFormat(formatFiles);
+    }
+    if (app.got_subcommand("bench"))
+    {
+        return runBenchmark(benchFiles, benchRuns, compareTool);
+    }
+    if (app.got_subcommand("config"))
+    {
+        return runConfigurator();
+    }
+    if (app.got_subcommand("learn"))
+    {
+        return runLearn(learnFile, learnOutput);
+    }
+
+    if (!directFiles.empty())
+    {
+        return runFormatSingle(directFiles[0]);
+    }
+
+    printUsage();
+    return 0;
 }
 
 void FormatterApp::printUsage()
@@ -97,10 +133,10 @@ void FormatterApp::printUsage()
     printf("  --version, -v     Print version information\n");
     printf("  --help, -h        Print this help message\n");
     printf("  --easter-egg      Print a random easter egg\n");
-    printf("  --config, config  Launch interactive TUI configurator\n");
-    printf("  --learn [FILE]    Learn style from a file and generate .fmtpp.toml\n");
-    printf("  --format FILE...  Format one or more files\n");
-    printf("  --benchmark FILE  Run performance benchmark\n");
+    printf("  config            Launch interactive TUI configurator\n");
+    printf("  learn [FILE]      Learn style from a file and generate .fmtpp.toml\n");
+    printf("  format FILE...    Format one or more files\n");
+    printf("  bench FILE        Run performance benchmark\n");
     printf("  FILE              Format a single file\n");
     printf("\nSupported languages: js, ts, java, c, cpp, cs, go, rust\n");
     printf("\nEaster egg: fmtpp - formatting code with style and zero leaks\n");
@@ -164,30 +200,12 @@ int FormatterApp::runConfigurator()
     return 0;
 }
 
-int FormatterApp::runLearn(int argc, const char* argv[])
+int FormatterApp::runLearn(const std::string& sourceFile, const std::string& outputFile)
 {
-    const char* filepath = ".fmtpp.toml";
-    const char* sourceFile = NULL;
-
-    if (argc >= 3)
-    {
-        sourceFile = argv[2];
-    }
-    else
-    {
-        printf("Usage: %s --learn <file>\n", m_programName.c_str());
-        return 1;
-    }
-
-    if (argc >= 4)
-    {
-        filepath = argv[3];
-    }
-
-    SourceBuffer source(sourceFile);
+    SourceBuffer source(sourceFile.c_str());
     if (!source.isValid())
     {
-        printf("Error: Cannot read file: %s\n", sourceFile);
+        printf("Error: Cannot read file: %s\n", sourceFile.c_str());
         return 1;
     }
 
@@ -195,16 +213,16 @@ int FormatterApp::runLearn(int argc, const char* argv[])
     ProgramNode* ast = parser.parse(source);
     if (ast == NULL)
     {
-        printf("Error: Cannot parse file: %s\n", sourceFile);
+        printf("Error: Cannot parse file: %s\n", sourceFile.c_str());
         return 1;
     }
 
     StyleDetector detector;
     Config detected = detector.detect(ast);
 
-    if (detector.writeConfig(filepath))
+    if (detector.writeConfig(outputFile.c_str()))
     {
-        printf("Style detected and written to %s\n", filepath);
+        printf("Style detected and written to %s\n", outputFile.c_str());
         printf("Detected settings:\n");
         printf("  printWidth: %d\n", detected.printWidth);
         printf("  useTabs: %s\n", detected.useTabs ? "true" : "false");
@@ -215,47 +233,37 @@ int FormatterApp::runLearn(int argc, const char* argv[])
     }
     else
     {
-        printf("Error: Cannot write config file: %s\n", filepath);
+        printf("Error: Cannot write config file: %s\n", outputFile.c_str());
         return 1;
     }
 
     return 0;
 }
 
-int FormatterApp::runFormat(int argc, const char* argv[])
+int FormatterApp::runFormat(const std::vector<std::string>& files)
 {
-    if (argc < 3)
+    if (files.empty())
     {
-        printf("Usage: %s --format <file...>\n", m_programName.c_str());
+        printf("Usage: %s format <file...>\n", m_programName.c_str());
         return 1;
     }
 
-    // Detect language from file extension
-    std::string language = detectLanguage(argv[2]);
+    std::string language = detectLanguage(files[0].c_str());
 
-    if (argc == 3)
+    if (files.size() == 1)
     {
-        // Single file
-        return runFormatSingle(argv[2]);
+        return runFormatSingle(files[0]);
     }
 
-    // Multiple files - use thread pool
-    std::vector<std::string> files;
-    int i;
-    for (i = 2; i < argc; i++)
-    {
-        files.push_back(argv[i]);
-    }
-
-    ThreadPool pool(0); // Use hardware concurrency
-    printf("Formatting %d files with %zu threads...\n",
-        static_cast<int>(files.size()), pool.getWorkerCount());
+    ThreadPool pool(0);
+    printf("Formatting %zu files with %zu threads...\n",
+        files.size(), pool.getWorkerCount());
 
     std::vector<std::string> results = pool.parallelFormat(files, language);
 
-    int successCount = 0;
-    int failCount = 0;
-    for (i = 0; i < static_cast<int>(results.size()); i++)
+    size_t successCount = 0;
+    size_t failCount = 0;
+    for (size_t i = 0; i < results.size(); i++)
     {
         if (!results[i].empty())
         {
@@ -269,18 +277,67 @@ int FormatterApp::runFormat(int argc, const char* argv[])
         }
     }
 
-    printf("Done: %d succeeded, %d failed\n", successCount, failCount);
+    printf("Done: %zu succeeded, %zu failed\n", successCount, failCount);
     printf("Easter egg: the thread pool has done its parallel dance\n");
 
     return (failCount > 0) ? 1 : 0;
 }
 
-int FormatterApp::runFormatSingle(const char* filepath)
+int FormatterApp::runBenchmark(const std::vector<std::string>& files, int runs, const std::string& compareTool)
 {
-    SourceBuffer source(filepath);
+    if (files.empty())
+    {
+        printf("Usage: %s bench <file> [--runs N] [--compare <oxfmt|prettier>]\n", m_programName.c_str());
+        return 1;
+    }
+
+    Benchmark::Config benchConfig;
+    benchConfig.iterations = runs;
+    benchConfig.warmup = true;
+    benchConfig.verbose = true;
+    benchConfig.language = detectLanguage(files[0].c_str());
+    benchConfig.files = files;
+    benchConfig.compareTool = compareTool;
+
+    printf("fmtpp Benchmark\n");
+    printf("  Files: %zu\n", benchConfig.files.size());
+    printf("  Iterations: %d\n", benchConfig.iterations);
+    printf("  Language: %s\n", benchConfig.language.c_str());
+    printf("  Warmup: %s\n", benchConfig.warmup ? "yes" : "no");
+    if (!benchConfig.compareTool.empty())
+    {
+        printf("  Compare tool: %s\n", benchConfig.compareTool.c_str());
+    }
+    printf("Easter egg: the benchmarker is warming up...\n");
+
+    Benchmark bench;
+    Benchmark::Result result = bench.run(benchConfig);
+    bench.printReport(result);
+
+    if (!benchConfig.compareTool.empty())
+    {
+        Benchmark::Result baseline = bench.runCompare(benchConfig, result);
+        if (baseline.filesProcessed > 0)
+        {
+            bench.printCompareReport(result, baseline, benchConfig.compareTool);
+        }
+        else
+        {
+            printf("Warning: Could not run comparison tool '%s'. Is it installed?\n",
+                benchConfig.compareTool.c_str());
+            printf("Easter egg: the comparison tool is playing hide and seek\n");
+        }
+    }
+
+    return 0;
+}
+
+int FormatterApp::runFormatSingle(const std::string& filepath)
+{
+    SourceBuffer source(filepath.c_str());
     if (!source.isValid())
     {
-        printf("Error: Cannot read file: %s\n", filepath);
+        printf("Error: Cannot read file: %s\n", filepath.c_str());
         return 1;
     }
 
@@ -288,16 +345,15 @@ int FormatterApp::runFormatSingle(const char* filepath)
     ProgramNode* ast = parser.parse(source);
     if (ast == NULL)
     {
-        printf("Error: Cannot parse file: %s\n", filepath);
+        printf("Error: Cannot parse file: %s\n", filepath.c_str());
         return 1;
     }
 
-    std::string language = detectLanguage(filepath);
+    std::string language = detectLanguage(filepath.c_str());
     Config config;
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
     FormatterVisitor* formatter = NULL;
 
-    // Select formatter based on language
     if (language == "js" || language == "javascript")
     {
         formatter = new JSFormatter(out, config);
@@ -332,7 +388,6 @@ int FormatterApp::runFormatSingle(const char* filepath)
     }
     else
     {
-        // Default to JavaScript
         formatter = new JSFormatter(out, config);
     }
 
@@ -347,88 +402,6 @@ int FormatterApp::runFormatSingle(const char* filepath)
     return 1;
 }
 
-int FormatterApp::runBenchmark(int argc, const char* argv[])
-{
-    if (argc < 3)
-    {
-        printf("Usage: %s bench <file> [--runs N] [--compare <oxfmt|prettier>]\n", m_programName.c_str());
-        return 1;
-    }
-
-    Benchmark::Config benchConfig;
-    benchConfig.warmup = true;
-    benchConfig.verbose = true;
-
-    int i;
-    for (i = 2; i < argc; i++)
-    {
-        if (std::strcmp(argv[i], "--runs") == 0)
-        {
-            if (i + 1 < argc)
-            {
-                benchConfig.iterations = std::atoi(argv[i + 1]);
-                if (benchConfig.iterations < 1)
-                {
-                    benchConfig.iterations = 1;
-                }
-                i++;
-            }
-        }
-        else if (std::strcmp(argv[i], "--compare") == 0)
-        {
-            if (i + 1 < argc)
-            {
-                benchConfig.compareTool = argv[i + 1];
-                i++;
-            }
-        }
-        else if (argv[i][0] != '-')
-        {
-            benchConfig.files.push_back(argv[i]);
-        }
-    }
-
-    if (benchConfig.files.empty())
-    {
-        printf("Usage: %s bench <file> [--runs N] [--compare <oxfmt|prettier>]\n", m_programName.c_str());
-        return 1;
-    }
-
-    benchConfig.language = detectLanguage(benchConfig.files[0].c_str());
-
-    printf("fmtpp Benchmark\n");
-    printf("  Files: %d\n", static_cast<int>(benchConfig.files.size()));
-    printf("  Iterations: %d\n", benchConfig.iterations);
-    printf("  Language: %s\n", benchConfig.language.c_str());
-    printf("  Warmup: %s\n", benchConfig.warmup ? "yes" : "no");
-    if (!benchConfig.compareTool.empty())
-    {
-        printf("  Compare tool: %s\n", benchConfig.compareTool.c_str());
-    }
-    printf("Easter egg: the benchmarker is warming up...\n");
-
-    Benchmark bench;
-    Benchmark::Result result = bench.run(benchConfig);
-    bench.printReport(result);
-
-    if (!benchConfig.compareTool.empty())
-    {
-        Benchmark::Result baseline = bench.runCompare(benchConfig, result);
-        if (baseline.filesProcessed > 0)
-        {
-            bench.printCompareReport(result, baseline, benchConfig.compareTool);
-        }
-        else
-        {
-            printf("Warning: Could not run comparison tool '%s'. Is it installed?\n",
-                benchConfig.compareTool.c_str());
-            printf("Easter egg: the comparison tool is playing hide and seek\n");
-        }
-    }
-
-    return 0;
-}
-
 std::string FormatterApp::detectLanguage(const char* filepath)
 {
     if (filepath == NULL)
@@ -436,7 +409,6 @@ std::string FormatterApp::detectLanguage(const char* filepath)
         return "js";
     }
 
-    // Find the last dot in the filename
     const char* dot = strrchr(filepath, '.');
     if (dot == NULL)
     {

@@ -5,8 +5,22 @@ set(CMAKE_CXX_STANDARD 98)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-# C++11 for threading support
+# C++11 for threading support and third-party dependencies
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-std=c++11>)
+
+# Third-party dependencies via FetchContent
+include(FetchContent)
+
+# Local source mirrors are used when network FetchContent is unavailable;
+# set FETCHCONTENT_SOURCE_DIR_<NAME> to override with a different path.
+set(FETCHCONTENT_SOURCE_DIR_CLI11 ${CMAKE_SOURCE_DIR}/lib/cli11 CACHE PATH "CLI11 source directory")
+
+FetchContent_Declare(
+    cli11
+    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+    GIT_TAG v2.4.2
+)
+FetchContent_MakeAvailable(cli11)
 
 set(FMTPP_SOURCES
   src/FormatterApp.cpp
@@ -44,6 +58,8 @@ add_library(fmtpp_static STATIC ${FMTPP_SOURCES})
 target_include_directories(fmtpp_static PUBLIC
   ${CMAKE_SOURCE_DIR}/include
 )
+
+target_link_libraries(fmtpp_static PUBLIC CLI11::CLI11)
 
 # Build pragma message displayed at compile time
 target_compile_options(fmtpp_static PUBLIC
