@@ -17,9 +17,12 @@
 #include <ctime>
 #include <cstring>
 #include <algorithm>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
+#define popen _popen
+#define pclose _pclose
 #else
 #include <sys/time.h>
 #endif
@@ -46,6 +49,31 @@ double Benchmark::getTimeMs()
     gettimeofday(&tv, NULL);
     return (tv.tv_sec * 1000.0) + (tv.tv_usec / 1000.0);
 #endif
+}
+
+double Benchmark::computePercentile(const std::vector<double>& samples, double percentile) const
+{
+    if (samples.empty())
+    {
+        return 0.0;
+    }
+
+    size_t n = samples.size();
+    if (n == 1)
+    {
+        return samples[0];
+    }
+
+    double position = percentile * static_cast<double>(n - 1);
+    size_t lower = static_cast<size_t>(position);
+    size_t upper = lower + 1;
+    if (upper >= n)
+    {
+        return samples[n - 1];
+    }
+
+    double weight = position - static_cast<double>(lower);
+    return samples[lower] * (1.0 - weight) + samples[upper] * weight;
 }
 
 double Benchmark::formatFile(const std::string& filepath, const std::string& language)
@@ -118,18 +146,50 @@ double Benchmark::formatFile(const std::string& filepath, const std::string& lan
     return elapsed;
 }
 
+double Benchmark::formatFileExternal(const std::string& filepath, const std::string& tool)
+{
+    double startTime = getTimeMs();
+
+    std::string command;
+    if (tool == "prettier")
+    {
+        command = "prettier ";
+    }
+    else if (tool == "oxfmt")
+    {
+        command = "oxfmt ";
+    }
+    else
+    {
+        command = tool + " ";
+    }
+    command += filepath;
+
+    FILE* pipe = popen(command.c_str(), "r");
+    if (pipe == NULL)
+    {
+        return -1.0;
+    }
+
+    char buffer[1024];
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL)
+    {
+        // Drain output to ensure the tool actually ran
+    }
+
+    int status = pclose(pipe);
+    if (status != 0)
+    {
+        return -1.0;
+    }
+
+    return getTimeMs() - startTime;
+}
+
 Benchmark::Result Benchmark::run(const Config& config)
 {
     Result result;
-    result.totalTimeMs = 0.0;
-    result.averageTimeMs = 0.0;
-    result.minTimeMs = 1e9;
-    result.maxTimeMs = 0.0;
-    result.filesProcessed = 0;
-    result.totalBytesProcessed = 0;
-    result.throughputBytesPerSec = 0;
-    result.memoryPoolUsed = 0;
-    result.memoryPoolCapacity = 0;
+    std::vector<double> samples;
 
     if (config.files.empty())
     {
@@ -162,14 +222,15 @@ Benchmark::Result Benchmark::run(const Config& config)
 
             if (fileTime >= 0.0)
             {
+                samples.push_back(fileTime);
                 result.totalTimeMs += fileTime;
                 result.filesProcessed++;
 
-                if (fileTime < result.minTimeMs)
+                if (result.filesProcessed == 1 || fileTime < result.minTimeMs)
                 {
                     result.minTimeMs = fileTime;
                 }
-                if (fileTime > result.maxTimeMs)
+                if (result.filesProcessed == 1 || fileTime > result.maxTimeMs)
                 {
                     result.maxTimeMs = fileTime;
                 }
@@ -184,10 +245,17 @@ Benchmark::Result Benchmark::run(const Config& config)
         }
     }
 
-    // Calculate averages
+    // Calculate statistics
     if (result.filesProcessed > 0)
     {
         result.averageTimeMs = result.totalTimeMs / static_cast<double>(result.filesProcessed);
+    }
+
+    if (!samples.empty())
+    {
+        std::sort(samples.begin(), samples.end());
+        result.medianTimeMs = computePercentile(samples, 0.5);
+        result.p95TimeMs = computePercentile(samples, 0.95);
     }
 
     // Calculate throughput
@@ -208,6 +276,86 @@ Benchmark::Result Benchmark::run(const Config& config)
     return result;
 }
 
+Benchmark::Result Benchmark::runCompare(const Config& config, const Result& fmtppResult)
+{
+    Result baseline;
+    std::vector<double> samples;
+
+    if (config.files.empty() || config.compareTool.empty())
+    {
+        return baseline;
+    }
+
+    // Warmup run for external tool
+    if (config.warmup && !config.files.empty())
+    {
+        if (config.verbose)
+        {
+            printf("  Warmup run (%s)...\n", config.compareTool.c_str());
+        }
+        formatFileExternal(config.files[0], config.compareTool);
+    }
+
+    // Benchmark runs for external tool
+    int iter;
+    for (iter = 0; iter < config.iterations; iter++)
+    {
+        if (config.verbose)
+        {
+            printf("  Iteration %d/%d (%s)...\n", iter + 1, config.iterations, config.compareTool.c_str());
+        }
+
+        size_t i;
+        for (i = 0; i < config.files.size(); i++)
+        {
+            double fileTime = formatFileExternal(config.files[i], config.compareTool);
+
+            if (fileTime >= 0.0)
+            {
+                samples.push_back(fileTime);
+                baseline.totalTimeMs += fileTime;
+                baseline.filesProcessed++;
+
+                if (baseline.filesProcessed == 1 || fileTime < baseline.minTimeMs)
+                {
+                    baseline.minTimeMs = fileTime;
+                }
+                if (baseline.filesProcessed == 1 || fileTime > baseline.maxTimeMs)
+                {
+                    baseline.maxTimeMs = fileTime;
+                }
+
+                SourceBuffer sb(config.files[i].c_str());
+                if (sb.isValid())
+                {
+                    baseline.totalBytesProcessed += sb.getSize();
+                }
+            }
+        }
+    }
+
+    if (baseline.filesProcessed > 0)
+    {
+        baseline.averageTimeMs = baseline.totalTimeMs / static_cast<double>(baseline.filesProcessed);
+    }
+
+    if (!samples.empty())
+    {
+        std::sort(samples.begin(), samples.end());
+        baseline.medianTimeMs = computePercentile(samples, 0.5);
+        baseline.p95TimeMs = computePercentile(samples, 0.95);
+    }
+
+    if (baseline.totalTimeMs > 0.0)
+    {
+        double totalSeconds = baseline.totalTimeMs / 1000.0;
+        baseline.throughputBytesPerSec = static_cast<size_t>(
+            static_cast<double>(baseline.totalBytesProcessed) / totalSeconds);
+    }
+
+    return baseline;
+}
+
 void Benchmark::printReport(const Result& result)
 {
     printf("\n");
@@ -220,6 +368,8 @@ void Benchmark::printReport(const Result& result)
     printf("  Average per file:    %.2f ms\n", result.averageTimeMs);
     printf("  Min time:            %.2f ms\n", result.minTimeMs);
     printf("  Max time:            %.2f ms\n", result.maxTimeMs);
+    printf("  Median time:         %.2f ms\n", result.medianTimeMs);
+    printf("  P95 time:            %.2f ms\n", result.p95TimeMs);
     printf("  Throughput:          %zu bytes/sec\n", result.throughputBytesPerSec);
 
     if (result.throughputBytesPerSec > 1024 * 1024)
@@ -250,5 +400,36 @@ void Benchmark::printReport(const Result& result)
         printf("  Easter egg: even turtles can win races with determination\n");
     }
 
+    printf("  ========================================\n\n");
+}
+
+void Benchmark::printCompareReport(
+    const Result& fmtppResult,
+    const Result& baselineResult,
+    const std::string& toolName)
+{
+    printf("\n");
+    printf("  ========================================\n");
+    printf("  fmtpp Benchmark Comparison: fmtpp vs %s\n", toolName.c_str());
+    printf("  ========================================\n");
+    printf("  %-20s %12s %12s\n", "Metric", "fmtpp", toolName.c_str());
+    printf("  %-20s %12.2f %12.2f\n", "Avg (ms)", fmtppResult.averageTimeMs, baselineResult.averageTimeMs);
+    printf("  %-20s %12.2f %12.2f\n", "Min (ms)", fmtppResult.minTimeMs, baselineResult.minTimeMs);
+    printf("  %-20s %12.2f %12.2f\n", "Max (ms)", fmtppResult.maxTimeMs, baselineResult.maxTimeMs);
+    printf("  %-20s %12.2f %12.2f\n", "Median (ms)", fmtppResult.medianTimeMs, baselineResult.medianTimeMs);
+    printf("  %-20s %12.2f %12.2f\n", "P95 (ms)", fmtppResult.p95TimeMs, baselineResult.p95TimeMs);
+    printf("  %-20s %12zu %12zu\n", "Throughput (B/s)", fmtppResult.throughputBytesPerSec, baselineResult.throughputBytesPerSec);
+
+    if (baselineResult.averageTimeMs > 0.0)
+    {
+        double speedup = baselineResult.averageTimeMs / fmtppResult.averageTimeMs;
+        printf("\n  fmtpp is %.2fx %s than %s\n",
+            speedup,
+            (speedup >= 1.0) ? "faster" : "slower",
+            toolName.c_str());
+    }
+
+    printf("  ========================================\n");
+    printf("  Easter egg: may the fastest formatter win\n");
     printf("  ========================================\n\n");
 }

@@ -351,32 +351,80 @@ int FormatterApp::runBenchmark(int argc, const char* argv[])
 {
     if (argc < 3)
     {
-        printf("Usage: %s --benchmark <file...>\n", m_programName.c_str());
+        printf("Usage: %s bench <file> [--runs N] [--compare <oxfmt|prettier>]\n", m_programName.c_str());
         return 1;
     }
 
     Benchmark::Config benchConfig;
-    benchConfig.iterations = 10;
     benchConfig.warmup = true;
     benchConfig.verbose = true;
-    benchConfig.language = detectLanguage(argv[2]);
 
     int i;
     for (i = 2; i < argc; i++)
     {
-        benchConfig.files.push_back(argv[i]);
+        if (std::strcmp(argv[i], "--runs") == 0)
+        {
+            if (i + 1 < argc)
+            {
+                benchConfig.iterations = std::atoi(argv[i + 1]);
+                if (benchConfig.iterations < 1)
+                {
+                    benchConfig.iterations = 1;
+                }
+                i++;
+            }
+        }
+        else if (std::strcmp(argv[i], "--compare") == 0)
+        {
+            if (i + 1 < argc)
+            {
+                benchConfig.compareTool = argv[i + 1];
+                i++;
+            }
+        }
+        else if (argv[i][0] != '-')
+        {
+            benchConfig.files.push_back(argv[i]);
+        }
     }
+
+    if (benchConfig.files.empty())
+    {
+        printf("Usage: %s bench <file> [--runs N] [--compare <oxfmt|prettier>]\n", m_programName.c_str());
+        return 1;
+    }
+
+    benchConfig.language = detectLanguage(benchConfig.files[0].c_str());
 
     printf("fmtpp Benchmark\n");
     printf("  Files: %d\n", static_cast<int>(benchConfig.files.size()));
     printf("  Iterations: %d\n", benchConfig.iterations);
     printf("  Language: %s\n", benchConfig.language.c_str());
     printf("  Warmup: %s\n", benchConfig.warmup ? "yes" : "no");
+    if (!benchConfig.compareTool.empty())
+    {
+        printf("  Compare tool: %s\n", benchConfig.compareTool.c_str());
+    }
     printf("Easter egg: the benchmarker is warming up...\n");
 
     Benchmark bench;
     Benchmark::Result result = bench.run(benchConfig);
     bench.printReport(result);
+
+    if (!benchConfig.compareTool.empty())
+    {
+        Benchmark::Result baseline = bench.runCompare(benchConfig, result);
+        if (baseline.filesProcessed > 0)
+        {
+            bench.printCompareReport(result, baseline, benchConfig.compareTool);
+        }
+        else
+        {
+            printf("Warning: Could not run comparison tool '%s'. Is it installed?\n",
+                benchConfig.compareTool.c_str());
+            printf("Easter egg: the comparison tool is playing hide and seek\n");
+        }
+    }
 
     return 0;
 }
