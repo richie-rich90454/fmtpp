@@ -54,7 +54,9 @@ namespace {
 
     bool WorkerQueue::getTask(FormatTask& task) {
         std::unique_lock<std::mutex> lock(m_mutex);
-        m_cond.wait(lock);
+        while (!m_done && m_tasks.empty()) {
+            m_cond.wait(lock);
+        }
         if (m_done && m_tasks.empty()) {
             return false;
         }

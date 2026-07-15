@@ -78,6 +78,7 @@ set(FMTPP_TESTS
   test_outputbuffer
   test_parser
   test_raii_wrappers
+  test_threadpool
   test_tsformatter
 )
 
