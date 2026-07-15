@@ -39,9 +39,18 @@ public:
     /** Resets the pool to empty (all pointers become invalid). */
     void reset();
 
+    // Non-copyable
+    MemoryPool(const MemoryPool& other);
+    MemoryPool& operator=(const MemoryPool& other);
+
 private:
+    /** Pointer to the malloc'd memory block. */
     char* m_pool;
+
+    /** Number of bytes currently allocated from the pool. */
     size_t m_used;
+
+    /** Total size of the memory block in bytes. */
     size_t m_capacity;
 };
 
