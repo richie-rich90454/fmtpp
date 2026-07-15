@@ -1,3 +1,4 @@
+// Easter egg: output buffer tests - because every byte deserves a verified home
 #include <cstdio>
 #include <cstring>
 #include "fmtpp/OutputBuffer.hpp"

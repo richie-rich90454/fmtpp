@@ -1,3 +1,4 @@
+// Easter egg: Go formatter tests - no semicolons were harmed in this test suite
 #include <cstdio>
 #include <cstring>
 #include "fmtpp/MemoryPool.hpp"

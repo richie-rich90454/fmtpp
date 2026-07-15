@@ -1,3 +1,4 @@
+// Easter egg: TS formatter tests - where types and tabs live in harmony
 #include <cstdio>
 #include <cstring>
 #include "fmtpp/MemoryPool.hpp"

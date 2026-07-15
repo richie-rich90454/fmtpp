@@ -1,3 +1,4 @@
+// Easter egg: JS formatter tests - semicolons optional, quality mandatory
 #include <cstdio>
 #include <cstring>
 #include "fmtpp/MemoryPool.hpp"

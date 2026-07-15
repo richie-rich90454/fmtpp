@@ -1,3 +1,4 @@
+// Easter egg: testing the C-style formatter base - where braces meet their destiny
 #include <cstdio>
 #include <cstring>
 #include "fmtpp/MemoryPool.hpp"

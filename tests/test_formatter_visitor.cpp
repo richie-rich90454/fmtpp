@@ -1,3 +1,4 @@
+// Easter egg: formatter visitor tests - proving abstract classes can still have fun
 #include <cstdio>
 #include "fmtpp/FormatterVisitor.hpp"
 #include "fmtpp/OutputBuffer.hpp"
