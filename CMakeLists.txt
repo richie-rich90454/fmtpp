@@ -100,6 +100,7 @@ enable_testing()
 set(FMTPP_TESTS
   test_ast
   test_benchmark
+  test_configbuilder
   test_cstyle_formatter_base_core
   test_formatter_visitor
   test_goformatter
