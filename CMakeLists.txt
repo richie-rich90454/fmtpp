@@ -63,6 +63,12 @@ set(FMTPP_SOURCES
 
 add_library(fmtpp_static STATIC ${FMTPP_SOURCES})
 
+# toml++ v3 requires C++17; keep the rest of the project at C++11
+set_source_files_properties(src/ConfigBuilder.cpp PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED ON
+)
+
 target_include_directories(fmtpp_static PUBLIC
   ${CMAKE_SOURCE_DIR}/include
 )
