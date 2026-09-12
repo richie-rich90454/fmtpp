@@ -3,6 +3,15 @@
 `fmtpp` reads `.fmtpp.toml` (TOML, parsed with toml++). Defaults mirror
 Prettier.
 
+## Config resolution
+
+`format` looks for `.fmtpp.toml` starting in the **formatted file's own
+directory**, then each parent directory (same rule as Prettier). The
+first config found wins; a missing or unparseable file silently falls
+back to defaults. Unknown keys are ignored. If your config seems
+ignored, check it sits next to (or above) the file you format — not
+just in your shell's working directory.
+
 ## Generating config
 
 ```sh
