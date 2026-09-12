@@ -33,6 +33,9 @@ public:
         carrying its own m_catchClause/m_catchBody). */
     std::vector<ASTNode*> m_extraCatches;
 
+    /** Optional else suite (Python try/else). NULL when absent. */
+    ASTNode* m_elseBlock;
+
     /** Optional finally block. */
     ASTNode* m_finallyBlock;
 
