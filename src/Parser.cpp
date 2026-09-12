@@ -30,6 +30,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -99,6 +101,8 @@ const LangProfile g_profiles[] = {
     { "v",        0,    0,    1,    1,    0,    "import",                "struct",              "interface",  "enum",  "fn",        FS_TRAIL, "module",  "match",   "type",0 },
     { "glsl",     1,    0,    1,    1,    0,    "",                      "struct",              "",           "",      "",          FS_CPREFIX,NULL,      "switch",  NULL,  0 },
     { "css",      1,    0,    0,    0,    1,    "@import @charset @namespace","","",            "",      "",          FS_CPREFIX,NULL,      NULL,      NULL,  0 },
+    { "python",   0,    0,    0,    1,    0,    "import from",           "class",              "",          "",      "def",       FS_COLON, NULL,      "match",   NULL,  0 },
+    { "ruby",     0,    1,    0,    1,    0,    "require",               "class",              "",          "",      "def",       FS_BARE,  NULL,      "case",    NULL,  0 },
     { NULL,       0,    0,    0,    0,    0,    NULL,                    NULL,                  NULL,         NULL,    NULL,        FS_CPREFIX,NULL,      NULL,      NULL,  0 }
 };
 
@@ -258,15 +262,72 @@ bool isRegexStart(const Cursor& c, size_t slashPos)
 }
 
 // Skips one string starting at the quote (handles escapes; backticks nest ${}).
+// Ruby "" nests #{}, Kotlin/Groovy "" nest ${}, Python f-strings nest {},
+// triple-quoted Python strings span lines. Bytes are skipped, never parsed.
+void skipBalanced(Cursor& c);
+void skipBalancedInner(Cursor& c);
+void stepUnit(Cursor& c, int& paren, int& brace, int& brack);
+
 void skipString(Cursor& c)
 {
     char quote = c.d[c.p];
+    std::string code = c.prof->code;
+    int interp = 0;
+    char marker = '$';
+    bool triple = false;
+    if (quote == '`')
+    {
+        interp = 1;
+        marker = '$';
+    }
+    else if (code == "ruby" && quote == '"')
+    {
+        interp = 1;
+        marker = '#';
+    }
+    else if ((code == "kotlin" || code == "groovy") && quote == '"')
+    {
+        interp = 1;
+        marker = '$';
+    }
+    else if (code == "python" && (quote == '"' || quote == '\''))
+    {
+        if (c.p + 2 < c.n && c.d[c.p + 1] == quote && c.d[c.p + 2] == quote)
+        {
+            triple = true;
+        }
+        size_t j = c.p;
+        while (j > 0 && isAlpha(c.d[j - 1])) { j--; }
+        for (size_t k = j; k < c.p; k++)
+        {
+            if (c.d[k] == 'f' || c.d[k] == 'F') { interp = 2; break; }
+        }
+    }
     c.p++;
+    if (triple) { c.p += 2; }
     int braceDepth = 0;
     while (c.p < c.n)
     {
         char ch = c.d[c.p];
         if (ch == '\\' && c.p + 1 < c.n) { c.p += 2; continue; }
+        if (interp == 1 && ch == marker && c.p + 1 < c.n && c.d[c.p + 1] == '{')
+        {
+            c.p += 2;
+            skipBalanced(c);
+            continue;
+        }
+        if (interp == 2 && ch == '{')
+        {
+            if (c.p + 1 < c.n && c.d[c.p + 1] == '{') { c.p += 2; continue; }
+            c.p++;
+            skipBalancedInner(c);
+            continue;
+        }
+        if (interp == 2 && ch == '}')
+        {
+            c.p++;
+            continue;
+        }
         if (quote == '`' && ch == '$' && c.p + 1 < c.n && c.d[c.p + 1] == '{')
         {
             braceDepth++;
@@ -275,7 +336,44 @@ void skipString(Cursor& c)
         }
         if (quote == '`' && ch == '}' && braceDepth > 0) { braceDepth--; c.p++; continue; }
         c.p++;
-        if (ch == quote && braceDepth == 0) { break; }
+        if (ch == quote && braceDepth == 0)
+        {
+            if (triple)
+            {
+                if (c.p + 1 < c.n && c.d[c.p] == quote && c.d[c.p + 1] == quote)
+                {
+                    c.p += 2;
+                    break;
+                }
+                continue;
+            }
+            break;
+        }
+    }
+}
+
+// Advances past a balanced {...} starting just past '{'.
+void skipBalancedInner(Cursor& c)
+{
+    int paren = 0, brace = 1, brack = 0;
+    while (c.p < c.n && brace > 0)
+    {
+        size_t before = c.p;
+        stepUnit(c, paren, brace, brack);
+        if (c.p == before) { c.p++; }
+    }
+}
+
+// Advances past a balanced {...} starting at '{'.
+void skipBalanced(Cursor& c)
+{
+    int paren = 0, brace = 0, brack = 0;
+    while (c.p < c.n)
+    {
+        size_t before = c.p;
+        stepUnit(c, paren, brace, brack);
+        if (c.p == before) { c.p++; }
+        if (brace == 0 && before > 0) { return; }
     }
 }
 
@@ -496,7 +594,7 @@ LiteralNode* mkStr(const std::string& inner)
     return node;
 }
 
-ASTNode* mkValue(const std::string& text)
+ASTNode* mkValue(const std::string& text, bool keepQuotes = false)
 {
     std::string t = trimStr(text);
     if (t.empty()) { return NULL; }
@@ -516,7 +614,15 @@ ASTNode* mkValue(const std::string& text)
     if (t.size() >= 2 && ((t[0] == '"' && t[t.size() - 1] == '"')
         || (t[0] == '\'' && t[t.size() - 1] == '\'')))
     {
+        // ponytail: py/rb keep prefixes, triples and raw bytes intact
+        if (keepQuotes) { return mkStr(t); }
         return mkStr(t.substr(1, t.size() - 2));
+    }
+    // ponytail: prefixed/triple strings never reach here stripped;
+    // keepQuotes callers pass them whole (quotes intact) for verbatim print
+    if (keepQuotes && (t.find('"') != std::string::npos || t.find('\'') != std::string::npos))
+    {
+        return mkStr(t);
     }
     return mkIdent(t);
 }
@@ -991,6 +1097,57 @@ void parseHeaderBlock(Cursor& c, std::vector<ASTNode*>& out, const std::string& 
 bool consumeBalancedParens(Cursor& c);
 std::string parseCondRest(Cursor& c);
 std::string consumeLogicalLinePreview(Cursor& c);
+
+bool isIndentLang(const LangProfile* prof)
+{
+    return strcmp(prof->code, "python") == 0;
+}
+
+bool isEndLang(const LangProfile* prof)
+{
+    return strcmp(prof->code, "ruby") == 0;
+}
+
+// Strips a trailing # comment (string-aware). Returns the comment after pos.
+std::string stripTrailingComment(const std::string& text, std::string& code)
+{
+    char quote = 0;
+    for (size_t i = 0; i < text.size(); i++)
+    {
+        char ch = text[i];
+        if (quote)
+        {
+            if (ch == '\\') { i++; }
+            else if (ch == quote) { quote = 0; }
+            continue;
+        }
+        if (ch == '"' || ch == '\'') { quote = ch; continue; }
+        if (ch == '#')
+        {
+            code = trimStr(text.substr(0, i));
+            return trimStr(text.substr(i));
+        }
+    }
+    code = trimStr(text);
+    return std::string();
+}
+
+// Column of the first non-whitespace char (tabs count 8, like Python).
+int measureIndent(const char* d, size_t n, size_t pos)
+{
+    int col = 0;
+    while (pos < n && (d[pos] == ' ' || d[pos] == '\t'))
+    {
+        col += (d[pos] == '\t') ? 8 : 1;
+        pos++;
+    }
+    return col;
+}
+
+bool rawStrings(const LangProfile* prof)
+{
+    return strcmp(prof->code, "python") == 0 || strcmp(prof->code, "ruby") == 0;
+}
 
 // Advances past a balanced (...) starting at '('. False when unbalanced.
 bool consumeBalancedParens(Cursor& c)
@@ -1552,8 +1709,14 @@ ASTNode* parseStatementText(const LangProfile* prof, const std::string& text)
         if (var != NULL) { return var; }
         return mkRawSemi(t, hadSemi);
     }
-    // prototype without return type is a call: pass through
-    FunctionDeclNode* proto = tryCFunction(t, true);
+    // prototype without return type is a call: pass through.
+    // indent/end languages never declare C prototypes (their f(x) lines
+    // are calls), so skip the prototype guess there entirely.
+    FunctionDeclNode* proto = NULL;
+    if (strcmp(prof->code, "python") != 0 && strcmp(prof->code, "ruby") != 0)
+    {
+        proto = tryCFunction(t, true);
+    }
     if (proto != NULL) { return proto; }
     // single bare words (break, continue, calls without args shape...)
     // pass through; kind/name splits rejoin byte-identical anyway
@@ -3384,6 +3547,1105 @@ void parseOne(Cursor& c, std::vector<ASTNode*>& out, bool& end)
     end = true;
 }
 
+// --- Indentation engine (Python) ---
+
+void parsePythonItems(Cursor& c, std::vector<ASTNode*>& out, int baseIndent,
+    std::vector<ASTNode*>& pending);
+void parsePythonLineText(Cursor& c, std::vector<ASTNode*>& out, const std::string& text,
+    int indent, std::vector<ASTNode*>& pending, IfStmtNode** heldIf,
+    TryCatchStmtNode** heldTry, ForStmtNode** heldFor,
+    WhileStmtNode** heldWhile);
+
+// --- Ruby end-delimited engine (see below, past the Python engine) ---
+
+struct RubyHolders
+{
+    IfStmtNode* iff;
+    TryCatchStmtNode* tcb;
+    SwitchStmtNode* sw;
+    FunctionDeclNode* def;
+    // which holder owns a trailing else: 0 none, 1 if, 2 case, 3 begin,
+    // 4 def (method-level rescue/ensure with no begin)
+    int kind;
+};
+
+int parseRubyItems(Cursor& c, std::vector<ASTNode*>& out,
+    std::vector<ASTNode*>& pending, std::vector<std::string>& segs,
+    size_t& pos, bool topLevel);
+
+int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t,
+    std::vector<ASTNode*>& pending, std::vector<std::string>& segs, size_t& pos,
+    RubyHolders* held, bool topLevel);
+
+// Splits a suite remainder (after :) into ;-separated statements.
+void parseSuiteRest(Cursor& c, const std::string& rest, BlockNode* suite)
+{
+    std::vector<std::string> parts;
+    splitTopLevel(rest, ';', parts);
+    for (size_t i = 0; i < parts.size(); i++)
+    {
+        std::string t = trimStr(parts[i]);
+        if (t.empty()) { continue; }
+        ASTNode* stmt = parseStatementText(c.prof, t);
+        if (stmt != NULL) { suite->m_statements.push_back(stmt); }
+    }
+}
+
+// Strips one trailing suite colon plus an optional trailing comment.
+// Comment text (if any) goes to trailingComment.
+std::string stripSuiteColon(const std::string& text, std::string& trailingComment)
+{
+    trailingComment.clear();
+    std::string t = trimStr(text);
+    size_t hash = std::string::npos;
+    {
+        char quote = 0;
+        for (size_t i = 0; i < t.size(); i++)
+        {
+            char ch = t[i];
+            if (quote)
+            {
+                if (ch == '\\') { i++; }
+                else if (ch == quote) { quote = 0; }
+                continue;
+            }
+            if (ch == '"' || ch == '\'') { quote = ch; continue; }
+            if (ch == '#') { hash = i; break; }
+        }
+    }
+    std::string code = t;
+    if (hash != std::string::npos)
+    {
+        trailingComment = trimStr(t.substr(hash));
+        code = trimStr(t.substr(0, hash));
+    }
+    if (!code.empty() && code[code.size() - 1] == ':')
+    {
+        code = trimStr(code.substr(0, code.size() - 1));
+    }
+    return code;
+}
+
+// Splits "header: suite..." at the FIRST depth-0 colon (string and
+// paren/bracket/brace aware). A suite rest holding only a # comment
+// counts as the trailing comment; a # comment inside the header is
+// lifted too. False when there is no suite colon.
+bool splitSuite(const std::string& t, size_t from, std::string& header,
+    std::string& body, std::string& tc)
+{
+    tc.clear();
+    header = t;
+    body.clear();
+    char quote = 0;
+    int paren = 0, brack = 0, brace = 0;
+    size_t colon = std::string::npos;
+    for (size_t i = from; i < t.size(); i++)
+    {
+        char ch = t[i];
+        if (quote)
+        {
+            if (ch == '\\') { i++; }
+            else if (ch == quote) { quote = 0; }
+            continue;
+        }
+        if (ch == '"' || ch == '\'') { quote = ch; continue; }
+        if (ch == '(') { paren++; }
+        else if (ch == ')') { if (paren > 0) paren--; }
+        else if (ch == '[') { brack++; }
+        else if (ch == ']') { if (brack > 0) brack--; }
+        else if (ch == '{') { brace++; }
+        else if (ch == '}') { if (brace > 0) brace--; }
+        else if (ch == ':' && paren == 0 && brack == 0 && brace == 0)
+        {
+            colon = i;
+            break;
+        }
+    }
+    if (colon == std::string::npos) { return false; }
+    header = trimStr(t.substr(0, colon));
+    body = trimStr(t.substr(colon + 1));
+    if (!body.empty() && body[0] == '#')
+    {
+        // ponytail: "if x:  # c" carries no inline suite, just a comment
+        tc = body;
+        body.clear();
+    }
+    std::string htc;
+    header = stripSuiteColon(header, htc);
+    if (tc.empty()) { tc = htc; }
+    return true;
+}
+
+// Appends a trailing "# ..." comment (with the #) as a suite statement.
+void pushSuiteComment(BlockNode* suite, const std::string& tc)
+{
+    if (suite == NULL || tc.empty()) { return; }
+    CommentNode* cm = ASTNodeFactory::createCommentNode();
+    cm->m_text = tc.size() > 1 ? trimStr(tc.substr(1)) : std::string();
+    cm->m_isBlock = false;
+    suite->m_statements.push_back(cm);
+}
+
+// Reads one logical Python line: joins backslash and bracket continuations.
+// Returns false at EOF. Comment-only lines come back flagged.
+bool readPythonLogical(Cursor& c, std::string& text, int& indent, bool& isComment)
+{
+    text.clear();
+    isComment = false;
+    // skip blank lines entirely (they carry no structure)
+    for (;;)
+    {
+        if (c.p >= c.n) { return false; }
+        size_t ls = c.p;
+        while (c.p < c.n && (c.d[c.p] == ' ' || c.d[c.p] == '\t')) { c.p++; }
+        if (c.p < c.n && c.d[c.p] != '\n' && c.d[c.p] != '\r') { break; }
+        while (c.p < c.n && c.d[c.p] != '\n') { c.p++; }
+        if (c.p < c.n) { c.p++; }
+        (void)ls;
+    }
+    // ponytail: c.p already skipped the leading whitespace, so walk back
+    // to the line start before measuring (else every line reads as 0)
+    {
+        size_t ls = c.p;
+        while (ls > 0 && (c.d[ls - 1] == ' ' || c.d[ls - 1] == '\t')) { ls--; }
+        indent = measureIndent(c.d, c.n, ls);
+    }
+    // accumulate continuation lines
+    std::string acc;
+    int paren = 0, brack = 0, brace = 0;
+    for (;;)
+    {
+        size_t ls = c.p;
+        bool lineCont = false;
+        while (c.p < c.n && c.d[c.p] != '\n' && c.d[c.p] != '\r')
+        {
+            char ch = c.d[c.p];
+            if (ch == '"' || ch == '\'')
+            {
+                // ponytail: triple-quoted strings span lines; skip as a unit
+                if (c.p + 2 < c.n && c.d[c.p + 1] == ch && c.d[c.p + 2] == ch)
+                {
+                    c.p += 3;
+                    while (c.p + 2 < c.n
+                        && !(c.d[c.p] == ch && c.d[c.p + 1] == ch && c.d[c.p + 2] == ch))
+                    {
+                        if (c.d[c.p] == '\\') { c.p++; }
+                        c.p++;
+                    }
+                    if (c.p + 2 < c.n) { c.p += 3; }
+                    continue;
+                }
+                Cursor tmp = c;
+                skipString(tmp);
+                c.p = tmp.p;
+                continue;
+            }
+            // ponytail: trailing comments ride along verbatim inside leaves
+            if (ch == '#')
+            {
+                while (c.p < c.n && c.d[c.p] != '\n' && c.d[c.p] != '\r') { c.p++; }
+                break;
+            }
+            if (ch == '(') { paren++; }
+            else if (ch == ')') { if (paren > 0) paren--; }
+            else if (ch == '[') { brack++; }
+            else if (ch == ']') { if (brack > 0) brack--; }
+            else if (ch == '{') { brace++; }
+            else if (ch == '}') { if (brace > 0) brace--; }
+            else if (ch == '\\' && c.p + 1 < c.n
+                && (c.d[c.p + 1] == '\n' || c.d[c.p + 1] == '\r'))
+            {
+                lineCont = true;
+                break;
+            }
+            c.p++;
+        }
+        if (!acc.empty()) { acc += "\n"; }
+        acc += std::string(c.d + ls, c.p - ls);
+        if (c.p < c.n && c.d[c.p] == '\\') { c.p++; }
+        if (c.p < c.n && c.d[c.p] == '\r')
+        {
+            c.p++;
+            if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+        }
+        else if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+        if (!lineCont && paren <= 0 && brack <= 0 && brace <= 0) { break; }
+        if (c.p >= c.n) { break; }
+    }
+    text = acc;
+    std::string trimmed = trimStr(text);
+    if (!trimmed.empty() && trimmed[0] == '#')
+    {
+        isComment = true;
+    }
+    return true;
+}
+
+void parsePythonItems(Cursor& c, std::vector<ASTNode*>& out, int baseIndent,
+    std::vector<ASTNode*>& pending)
+{
+    IfStmtNode* heldIf = NULL;
+    TryCatchStmtNode* heldTry = NULL;
+    ForStmtNode* heldFor = NULL;
+    WhileStmtNode* heldWhile = NULL;
+    for (;;)
+    {
+        std::string text;
+        int indent = 0;
+        bool isComment = false;
+        size_t save = c.p;
+        if (!readPythonLogical(c, text, indent, isComment))
+        {
+            break;
+        }
+        if (isComment)
+        {
+            // ponytail: comments buffer until the next real line decides
+            // their level; a dangling tail flushes at the outer level
+            CommentNode* cm = ASTNodeFactory::createCommentNode();
+            std::string t = trimStr(text);
+            cm->m_text = t.size() > 1 ? trimStr(t.substr(1)) : std::string();
+            cm->m_isBlock = false;
+            pending.push_back(cm);
+            continue;
+        }
+        if (indent <= baseIndent)
+        {
+            // ponytail: dedent ends this suite; the line and the buffered
+            // comments belong to the caller
+            c.p = save;
+            break;
+        }
+        for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
+        pending.clear();
+        parsePythonLineText(c, out, text, indent, pending, &heldIf, &heldTry,
+            &heldFor, &heldWhile);
+    }
+    // ponytail: every held node is already pushed; chains simply end here
+}
+
+// Parses one "case PATTERN: [suite]" arm line into a match node.
+// A colon-less or pattern-less arm stays verbatim (pattern intact).
+void pushPythonMatchArm(Cursor& c, SwitchStmtNode* node, const std::string& line,
+    int armIndent, std::vector<ASTNode*>& pending)
+{
+    std::string t = trimStr(line);
+    std::string header;
+    std::string bodyrest;
+    std::string tc;
+    if (firstWord(t) != "case" || !splitSuite(t, 4, header, bodyrest, tc)
+        || trimStr(header.substr(4)).empty())
+    {
+        SwitchCaseNode* arm = ASTNodeFactory::createSwitchCaseNode();
+        arm->m_pattern = mkRaw(t);
+        arm->m_body = ASTNodeFactory::createBlockNode();
+        node->m_cases.push_back(arm);
+        return;
+    }
+    SwitchCaseNode* arm = ASTNodeFactory::createSwitchCaseNode();
+    arm->m_pattern = mkRaw(header + ":");
+    BlockNode* suite = ASTNodeFactory::createBlockNode();
+    if (!bodyrest.empty())
+    {
+        parseSuiteRest(c, bodyrest, suite);
+    }
+    else
+    {
+        parsePythonItems(c, suite->m_statements, armIndent, pending);
+    }
+    pushSuiteComment(suite, tc);
+    // ponytail: comments buffered before the arm open its suite
+    for (size_t i = 0; i < pending.size(); i++)
+    {
+        suite->m_statements.insert(suite->m_statements.begin() + i, pending[i]);
+    }
+    pending.clear();
+    arm->m_body = suite;
+    node->m_cases.push_back(arm);
+}
+
+// Parses indented "case" arms under a match header (c.p past the header).
+void parsePythonMatchArms(Cursor& c, SwitchStmtNode* node, int matchIndent,
+    std::vector<ASTNode*>& pending)
+{
+    for (;;)
+    {
+        std::string text;
+        int indent = 0;
+        bool isComment = false;
+        size_t save = c.p;
+        if (!readPythonLogical(c, text, indent, isComment))
+        {
+            break;
+        }
+        if (isComment)
+        {
+            CommentNode* cm = ASTNodeFactory::createCommentNode();
+            std::string t = trimStr(text);
+            cm->m_text = t.size() > 1 ? trimStr(t.substr(1)) : std::string();
+            cm->m_isBlock = false;
+            if (!node->m_cases.empty() && node->m_cases.back() != NULL)
+            {
+                SwitchCaseNode* last = static_cast<SwitchCaseNode*>(
+                    node->m_cases.back());
+                if (last->m_body != NULL && last->m_body->isBlock())
+                {
+                    static_cast<BlockNode*>(last->m_body)->m_statements.push_back(cm);
+                    continue;
+                }
+            }
+            pending.push_back(cm);
+            continue;
+        }
+        if (indent <= matchIndent)
+        {
+            c.p = save;
+            break;
+        }
+        std::string t = trimStr(text);
+        if (firstWord(t) != "case")
+        {
+            // ponytail: a non-arm line ends the match; the caller owns it
+            c.p = save;
+            break;
+        }
+        pushPythonMatchArm(c, node, t, indent, pending);
+    }
+}
+
+// Parses one logical Python line already read (c.p is past it).
+void parsePythonLineText(Cursor& c, std::vector<ASTNode*>& out, const std::string& text,
+    int indent, std::vector<ASTNode*>& pending, IfStmtNode** heldIf,
+    TryCatchStmtNode** heldTry, ForStmtNode** heldFor,
+    WhileStmtNode** heldWhile)
+{
+    (void)indent;
+    std::string t = trimStr(text);
+    if (t.empty()) { return; }
+    std::string w = firstWord(t);
+    // 1. continuations of a held if (pending comments close the suite)
+    if ((w == "elif" || w == "else") && heldIf != NULL && *heldIf != NULL
+        && (*heldIf)->m_elseBranch == NULL)
+    {
+        IfStmtNode* target = *heldIf;
+        *heldIf = NULL;
+        BlockNode* thenSuite = NULL;
+        if (target->m_thenBranch != NULL && target->m_thenBranch->isBlock())
+        {
+            thenSuite = static_cast<BlockNode*>(target->m_thenBranch);
+        }
+        if (thenSuite == NULL)
+        {
+            thenSuite = ASTNodeFactory::createBlockNode();
+            target->m_thenBranch = thenSuite;
+        }
+        for (size_t i = 0; i < pending.size(); i++) { thenSuite->m_statements.push_back(pending[i]); }
+        pending.clear();
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(t, w.size(), header, bodyrest, tc))
+        {
+            // ponytail: colon-less elif/else is invalid; keep it verbatim
+            // after the complete if instead of dropping it
+            out.push_back(target);
+            out.push_back(mkRaw(t));
+            return;
+        }
+        if (w == "else")
+        {
+            if (!trimStr(header.substr(4)).empty())
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!bodyrest.empty())
+            {
+                parseSuiteRest(c, bodyrest, suite);
+            }
+            else
+            {
+                parsePythonItems(c, suite->m_statements, indent, pending);
+            }
+            pushSuiteComment(suite, tc);
+            target->m_elseBranch = suite;
+        }
+        else
+        {
+            std::string cond = trimStr(header.substr(4));
+            if (cond.empty())
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            IfStmtNode* elif = ASTNodeFactory::createIfStmtNode();
+            elif->m_keyword = "elif";
+            elif->m_condition = mkValue(cond, true);
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!bodyrest.empty())
+            {
+                parseSuiteRest(c, bodyrest, suite);
+            }
+            else
+            {
+                parsePythonItems(c, suite->m_statements, indent, pending);
+            }
+            pushSuiteComment(suite, tc);
+            elif->m_thenBranch = suite;
+            target->m_elseBranch = elif;
+            *heldIf = elif;
+        }
+        return;
+    }
+    if ((w == "except" || w == "finally" || w == "else") && heldTry != NULL
+        && *heldTry != NULL)
+    {
+        TryCatchStmtNode* target = *heldTry;
+        *heldTry = NULL;
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(t, w.size(), header, bodyrest, tc))
+        {
+            // ponytail: colon-less except/finally/else is invalid; the try
+            // is already pushed, so keep just the line verbatim
+            out.push_back(mkRaw(t));
+            return;
+        }
+        if (w == "finally")
+        {
+            if (!trimStr(header.substr(7)).empty())
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!bodyrest.empty())
+            {
+                parseSuiteRest(c, bodyrest, suite);
+            }
+            else
+            {
+                parsePythonItems(c, suite->m_statements, indent, pending);
+            }
+            pushSuiteComment(suite, tc);
+            target->m_finallyBlock = suite;
+            return;
+        }
+        if (w == "else" && target->m_finallyBlock == NULL
+            && target->m_elseBlock == NULL)
+        {
+            if (!trimStr(header.substr(4)).empty())
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!bodyrest.empty())
+            {
+                parseSuiteRest(c, bodyrest, suite);
+            }
+            else
+            {
+                parsePythonItems(c, suite->m_statements, indent, pending);
+            }
+            pushSuiteComment(suite, tc);
+            target->m_elseBlock = suite;
+            *heldTry = target;
+            return;
+        }
+        if (w == "except" && target->m_finallyBlock == NULL)
+        {
+            std::string rest = trimStr(header.substr(6));
+            BlockNode* lastSuite = NULL;
+            if (!target->m_extraCatches.empty() && target->m_extraCatches.back() != NULL)
+            {
+                TryCatchStmtNode* last = static_cast<TryCatchStmtNode*>(
+                    target->m_extraCatches.back());
+                if (last->m_catchBody != NULL && last->m_catchBody->isBlock())
+                {
+                    lastSuite = static_cast<BlockNode*>(last->m_catchBody);
+                }
+            }
+            if (lastSuite == NULL && target->m_catchBody != NULL
+                && target->m_catchBody->isBlock())
+            {
+                lastSuite = static_cast<BlockNode*>(target->m_catchBody);
+            }
+            if (lastSuite == NULL && target->m_body != NULL
+                && target->m_body->isBlock())
+            {
+                lastSuite = static_cast<BlockNode*>(target->m_body);
+            }
+            if (lastSuite == NULL)
+            {
+                lastSuite = ASTNodeFactory::createBlockNode();
+                target->m_body = lastSuite;
+            }
+            for (size_t i = 0; i < pending.size(); i++) { lastSuite->m_statements.push_back(pending[i]); }
+            pending.clear();
+            if (target->m_catchClause == NULL && target->m_catchBody == NULL
+                && target->m_extraCatches.empty())
+            {
+                if (!rest.empty()) { target->m_catchClause = mkIdent(rest); }
+                BlockNode* suite = ASTNodeFactory::createBlockNode();
+                if (!bodyrest.empty())
+                {
+                    parseSuiteRest(c, bodyrest, suite);
+                }
+                else
+                {
+                    parsePythonItems(c, suite->m_statements, indent, pending);
+                }
+                pushSuiteComment(suite, tc);
+                target->m_catchBody = suite;
+            }
+            else
+            {
+                TryCatchStmtNode* extra = ASTNodeFactory::createTryCatchStmtNode();
+                if (!rest.empty()) { extra->m_catchClause = mkIdent(rest); }
+                BlockNode* suite = ASTNodeFactory::createBlockNode();
+                if (!bodyrest.empty())
+                {
+                    parseSuiteRest(c, bodyrest, suite);
+                }
+                else
+                {
+                    parsePythonItems(c, suite->m_statements, indent, pending);
+                }
+                pushSuiteComment(suite, tc);
+                extra->m_catchBody = suite;
+                target->m_extraCatches.push_back(extra);
+            }
+            *heldTry = target;
+            return;
+        }
+        // ponytail: misplaced continuation (else/except after finally)
+        // cannot attach; the try is already pushed, keep just the line
+        out.push_back(mkRaw(t));
+        return;
+    }
+    // 3. loop else: attaches to a held for/while, which is already complete
+    if (w == "else" && (heldTry == NULL || *heldTry == NULL))
+    {
+        ASTNode* loop = NULL;
+        ASTNode* loopBody = NULL;
+        ASTNode** elseSlot = NULL;
+        ForStmtNode** forHolder = NULL;
+        WhileStmtNode** whileHolder = NULL;
+        if (heldFor != NULL && *heldFor != NULL
+            && (*heldFor)->m_elseBlock == NULL)
+        {
+            loop = *heldFor;
+            loopBody = (*heldFor)->m_body;
+            elseSlot = &(*heldFor)->m_elseBlock;
+            forHolder = heldFor;
+        }
+        else if (heldWhile != NULL && *heldWhile != NULL
+            && (*heldWhile)->m_elseBlock == NULL)
+        {
+            loop = *heldWhile;
+            loopBody = (*heldWhile)->m_body;
+            elseSlot = &(*heldWhile)->m_elseBlock;
+            whileHolder = heldWhile;
+        }
+        if (elseSlot != NULL)
+        {
+            std::string header;
+            std::string bodyrest;
+            std::string tc;
+            if (!splitSuite(t, 4, header, bodyrest, tc)
+                || !trimStr(header.substr(4)).empty())
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            if (loopBody != NULL && loopBody->isBlock())
+            {
+                BlockNode* lb = static_cast<BlockNode*>(loopBody);
+                for (size_t i = 0; i < pending.size(); i++) { lb->m_statements.push_back(pending[i]); }
+                pending.clear();
+            }
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!bodyrest.empty())
+            {
+                parseSuiteRest(c, bodyrest, suite);
+            }
+            else
+            {
+                parsePythonItems(c, suite->m_statements, indent, pending);
+            }
+            pushSuiteComment(suite, tc);
+            *elseSlot = suite;
+            if (forHolder != NULL) { *forHolder = NULL; }
+            if (whileHolder != NULL) { *whileHolder = NULL; }
+            return;
+        }
+    }
+    // ponytail: holders only track open chains for continuations; every
+    // held node is already pushed, so a fresh line just closes the chains
+    if (heldIf != NULL) { *heldIf = NULL; }
+    if (heldTry != NULL) { *heldTry = NULL; }
+    if (heldFor != NULL) { *heldFor = NULL; }
+    if (heldWhile != NULL) { *heldWhile = NULL; }
+    for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
+    pending.clear();
+    // 4. fresh line dispatch below; async only prefixes def/for/with,
+    // anything else keeps the line whole for the verbatim fallback
+    std::string asyncPrefix;
+    std::string et = t;
+    if (w == "async")
+    {
+        std::string r2 = trimStr(t.substr(5));
+        std::string w2 = firstWord(r2);
+        if (w2 == "def" || w2 == "for" || w2 == "with")
+        {
+            asyncPrefix = "async ";
+            et = r2;
+            w = w2;
+        }
+    }
+    if (!t.empty() && t[0] == '@')
+    {
+        // ponytail: decorators ride along verbatim; the def below stays clean
+        out.push_back(mkRaw(t));
+        return;
+    }
+    if (w == "def")
+    {
+        // suite colon is the first depth-0 ':' past "def"; the body rest
+        // (if any) is the inline suite
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 3, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        // header is now `def name(params) [-> ret]` minus colon and comment
+        std::string rest = trimStr(header.substr(3));
+        size_t lp = findTopLevel(rest, '(');
+        std::string modifiers;
+        std::string name;
+        std::string params;
+        std::string returnType;
+        bool badDef = true;
+        if (lp != std::string::npos)
+        {
+            // ponytail: match the parameter parens structurally, so default
+            // values holding colons (lambdas, slices, dicts) cannot split
+            // the header, and the "-> ret" trailer is read exactly
+            std::string pre = trimStr(rest.substr(0, lp));
+            size_t nsp = pre.find_last_of(" \t\n");
+            std::string cand = (nsp == std::string::npos) ? pre : trimStr(pre.substr(nsp + 1));
+            std::string mods = (nsp == std::string::npos) ? std::string() : trimStr(pre.substr(0, nsp));
+            // ponytail: the name is one word; anything else is not a def
+            if (!cand.empty() && cand.find_first_of(" \t\n(){};,") == std::string::npos)
+            {
+                Cursor sub = c;
+                sub.d = rest.c_str();
+                sub.n = rest.size();
+                sub.p = lp;
+                if (readParenGroup(sub, params))
+                {
+                    std::string trailer = trimStr(rest.substr(sub.p));
+                    if (trailer.empty())
+                    {
+                        name = cand;
+                        modifiers = mods;
+                        badDef = false;
+                    }
+                    else if (trailer.size() > 2 && trailer[0] == '-'
+                        && trailer[1] == '>')
+                    {
+                        std::string rt = trimStr(trailer.substr(2));
+                        if (!rt.empty())
+                        {
+                            name = cand;
+                            modifiers = mods;
+                            returnType = rt;
+                            badDef = false;
+                        }
+                    }
+                }
+            }
+        }
+        if (badDef)
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        FunctionDeclNode* node = ASTNodeFactory::createFunctionDeclNode();
+        node->m_name = name;
+        node->m_modifiers = asyncPrefix + modifiers;
+        node->m_returnType = returnType;
+        if (!trimStr(params).empty()) { node->m_params.push_back(mkIdent(trimStr(params))); }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!bodyrest.empty())
+        {
+            parseSuiteRest(c, bodyrest, suite);
+        }
+        else
+        {
+            parsePythonItems(c, suite->m_statements, indent, pending);
+        }
+        pushSuiteComment(suite, tc);
+        node->m_body = suite;
+        out.push_back(node);
+        return;
+    }
+    if (w == "class")
+    {
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 5, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        std::string rest = trimStr(header.substr(5));
+        // name runs to '(' or end; bases live inside the parens
+        std::string name = rest;
+        std::string bases;
+        size_t lp = findTopLevel(rest, '(');
+        if (lp != std::string::npos)
+        {
+            name = trimStr(rest.substr(0, lp));
+            size_t rp = rest.rfind(')');
+            if (rp == std::string::npos || rp < lp)
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            bases = trimStr(rest.substr(lp + 1, rp - lp - 1));
+        }
+        if (name.empty() || name.find_first_of(" \t\n") != std::string::npos)
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        ClassDeclNode* node = ASTNodeFactory::createClassDeclNode();
+        node->m_name = name;
+        if (!bases.empty())
+        {
+            std::vector<std::string> parts;
+            splitTopLevel(bases, ',', parts);
+            for (size_t i = 0; i < parts.size(); i++)
+            {
+                if (parts[i].empty()) { continue; }
+                if (node->m_superClass == NULL) { node->m_superClass = mkIdent(parts[i]); }
+                else { node->m_implements.push_back(mkIdent(parts[i])); }
+            }
+        }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!bodyrest.empty())
+        {
+            parseSuiteRest(c, bodyrest, suite);
+        }
+        else
+        {
+            parsePythonItems(c, suite->m_statements, indent, pending);
+        }
+        pushSuiteComment(suite, tc);
+        node->m_body = suite;
+        out.push_back(node);
+        return;
+    }
+    if (w == "if")
+    {
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 2, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        std::string cond = trimStr(header.substr(2));
+        if (cond.empty())
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        IfStmtNode* node = ASTNodeFactory::createIfStmtNode();
+        node->m_condition = mkValue(cond, true);
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!bodyrest.empty())
+        {
+            parseSuiteRest(c, bodyrest, suite);
+        }
+        else
+        {
+            parsePythonItems(c, suite->m_statements, indent, pending);
+        }
+        pushSuiteComment(suite, tc);
+        node->m_thenBranch = suite;
+        // ponytail: pushed now, held for elif/else; continuations mutate
+        // the pushed node in place, so nothing is ever pushed twice
+        out.push_back(node);
+        *heldIf = node;
+        return;
+    }
+    if (w == "for")
+    {
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 3, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        std::string cond = trimStr(header.substr(3));
+        if (cond.empty())
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        ForStmtNode* node = ASTNodeFactory::createForStmtNode();
+        node->m_keyword = asyncPrefix + "for";
+        node->m_classic = false;
+        node->m_condition = mkValue(cond, true);
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!bodyrest.empty())
+        {
+            parseSuiteRest(c, bodyrest, suite);
+        }
+        else
+        {
+            parsePythonItems(c, suite->m_statements, indent, pending);
+        }
+        pushSuiteComment(suite, tc);
+        node->m_body = suite;
+        // ponytail: pushed now and held for a loop else (same protocol)
+        out.push_back(node);
+        if (heldFor != NULL) { *heldFor = node; }
+        return;
+    }
+    if (w == "while")
+    {
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 5, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        std::string cond = trimStr(header.substr(5));
+        if (cond.empty())
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        WhileStmtNode* node = ASTNodeFactory::createWhileStmtNode();
+        node->m_condition = mkValue(cond, true);
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!bodyrest.empty())
+        {
+            parseSuiteRest(c, bodyrest, suite);
+        }
+        else
+        {
+            parsePythonItems(c, suite->m_statements, indent, pending);
+        }
+        pushSuiteComment(suite, tc);
+        node->m_body = suite;
+        // ponytail: pushed now and held for a loop else (same protocol)
+        out.push_back(node);
+        if (heldWhile != NULL) { *heldWhile = node; }
+        return;
+    }
+    if (w == "try")
+    {
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 3, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        if (!trimStr(header.substr(3)).empty())
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        TryCatchStmtNode* node = ASTNodeFactory::createTryCatchStmtNode();
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!bodyrest.empty())
+        {
+            parseSuiteRest(c, bodyrest, suite);
+        }
+        else
+        {
+            parsePythonItems(c, suite->m_statements, indent, pending);
+        }
+        pushSuiteComment(suite, tc);
+        node->m_body = suite;
+        // ponytail: pushed now, held for except/else/finally below
+        out.push_back(node);
+        *heldTry = node;
+        return;
+    }
+    if (w == "with")
+    {
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 4, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        std::string ctx = trimStr(header.substr(4));
+        if (ctx.empty())
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        WithNode* node = ASTNodeFactory::createWithNode();
+        node->m_keyword = asyncPrefix + "with";
+        node->m_context = mkValue(ctx, true);
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!bodyrest.empty())
+        {
+            parseSuiteRest(c, bodyrest, suite);
+        }
+        else
+        {
+            parsePythonItems(c, suite->m_statements, indent, pending);
+        }
+        pushSuiteComment(suite, tc);
+        node->m_body = suite;
+        out.push_back(node);
+        return;
+    }
+    if (w == "match")
+    {
+        std::string header;
+        std::string bodyrest;
+        std::string tc;
+        if (!splitSuite(et, 5, header, bodyrest, tc))
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        std::string disc = trimStr(header.substr(5));
+        if (disc.empty())
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        SwitchStmtNode* node = ASTNodeFactory::createSwitchStmtNode();
+        node->m_discriminant = mkValue(disc, true);
+        if (!bodyrest.empty())
+        {
+            // ponytail: "match x: case 1: y" nests its one arm inline
+            pushPythonMatchArm(c, node, bodyrest, indent, pending);
+        }
+        else if (!tc.empty())
+        {
+            CommentNode* cm = ASTNodeFactory::createCommentNode();
+            cm->m_text = tc.size() > 1 ? trimStr(tc.substr(1)) : std::string();
+            cm->m_isBlock = false;
+            pending.push_back(cm);
+        }
+        parsePythonMatchArms(c, node, indent, pending);
+        out.push_back(node);
+        return;
+    }
+    if (w == "import" || w == "from")
+    {
+        // ponytail: comments ride inside the raw rest; the formatter splits
+        // source/specifiers back out, so nothing is lost either way
+        std::string rest = trimStr(et.substr(w.size()));
+        if (rest.empty())
+        {
+            out.push_back(mkRaw(t));
+            return;
+        }
+        ImportDeclNode* node = ASTNodeFactory::createImportDeclNode();
+        if (w == "from")
+        {
+            size_t im = rest.find(" import ");
+            if (im == std::string::npos)
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            node->m_source = trimStr(rest.substr(0, im));
+            std::string specs = trimStr(rest.substr(im + 8));
+            if (!specs.empty() && specs[0] == '('
+                && specs[specs.size() - 1] == ')')
+            {
+                specs = trimStr(specs.substr(1, specs.size() - 2));
+            }
+            std::vector<std::string> parts;
+            splitTopLevel(specs, ',', parts);
+            for (size_t i = 0; i < parts.size(); i++)
+            {
+                if (parts[i].empty()) { continue; }
+                node->m_specifiers.push_back(mkValue(parts[i], true));
+            }
+            if (node->m_source.empty() || node->m_specifiers.empty())
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+        }
+        else
+        {
+            // ponytail: "import a as b" splits cleanly; "import a, b" stays
+            // one verbatim source, which the formatter reprints as-is
+            std::string src = rest;
+            std::string alias;
+            size_t ap = rest.find(" as ");
+            if (ap != std::string::npos)
+            {
+                src = trimStr(rest.substr(0, ap));
+                alias = trimStr(rest.substr(ap + 4));
+            }
+            if (src.empty() || src.find(',') == std::string::npos)
+            {
+                node->m_source = src;
+                if (!alias.empty()) { node->m_defaultImport = mkIdent(alias); }
+            }
+            else if (alias.empty())
+            {
+                node->m_source = src;
+            }
+            else
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+            if (node->m_source.empty())
+            {
+                out.push_back(mkRaw(t));
+                return;
+            }
+        }
+        out.push_back(node);
+        return;
+    }
+    // ponytail: return/raise/assignments/calls/expressions all round-trip
+    // through the shared statement parser (trailing comments included)
+    {
+        ASTNode* stmt = parseStatementText(c.prof, t);
+        if (stmt != NULL)
+        {
+            out.push_back(stmt);
+            return;
+        }
+        out.push_back(mkRaw(t));
+        return;
+    }
+}
+
 } // namespace
 
 Parser::Parser()
@@ -3427,6 +4689,1124 @@ ProgramNode* Parser::parse(const SourceBuffer& source, const std::string& langua
     return parse(source.getData(), source.getSize(), language);
 }
 
+namespace {
+
+// --- Ruby end-delimited engine ---
+//
+// Segments (not lines) are the unit: each logical line splits on top-level
+// ';', so one-liners (def f; body; end) flow through the same path as
+// multi-line code. Openers consume their bodies via recursion; the recursion
+// stops (rewound) on continuations and consumes the closing end.
+
+// Collects <<[-~]?["']?WORD heredoc markers from one code line.
+// String-aware (strings stay opaque); stops at #. << needs its word glued:
+// spaces mean a shift operator, <<= is an assignment, quoted needs no space.
+void findRubyHeredocs(const std::string& line, const LangProfile* prof,
+    std::vector<std::string>& words)
+{
+    Cursor s;
+    s.d = line.c_str();
+    s.n = line.size();
+    s.p = 0;
+    s.prof = prof;
+    int dummy1 = 0, dummy2 = 0, dummy3 = 0;
+    while (s.p < s.n)
+    {
+        char ch = s.d[s.p];
+        if (ch == '#') { break; }
+        if (ch == '"' || ch == '\'' || ch == '`') { skipString(s); continue; }
+        if (ch == '/') { stepUnit(s, dummy1, dummy2, dummy3); continue; }
+        if (ch == '<' && s.p + 1 < s.n && s.d[s.p + 1] == '<')
+        {
+            size_t j = s.p + 2;
+            if (j < s.n && (s.d[j] == '-' || s.d[j] == '~')) { j++; }
+            std::string word;
+            if (j < s.n && (s.d[j] == '"' || s.d[j] == '\''))
+            {
+                char q = s.d[j];
+                j++;
+                size_t ws = j;
+                // ponytail: quoted heredoc words take anything but the
+                // quote (<<-"END;X" is a legal terminator name)
+                while (j < s.n && s.d[j] != q) { j++; }
+                if (j > ws && j < s.n && s.d[j] == q)
+                {
+                    word = line.substr(ws, j - ws);
+                    j++;
+                }
+            }
+            else if (j < s.n && (isAlpha(s.d[j]) || s.d[j] == '_'))
+            {
+                size_t ws = j;
+                while (j < s.n && (isAlpha(s.d[j]) || s.d[j] == '_' || isDigit(s.d[j]))) { j++; }
+                word = line.substr(ws, j - ws);
+            }
+            if (!word.empty()) { words.push_back(word); s.p = j; continue; }
+        }
+        s.p++;
+    }
+}
+
+// Walks one physical line, carrying bracket depths; true when the logical
+// line continues (unclosed brackets or a trailing backslash or operator).
+// Strings, regexes and comments travel as opaque units, so nothing inside
+// them can open, close or split anything.
+bool rubyJoins(const std::string& line, const LangProfile* prof,
+    int& paren, int& brack, int& brace)
+{
+    Cursor s;
+    s.d = line.c_str();
+    s.n = line.size();
+    s.p = 0;
+    s.prof = prof;
+    int dummy1 = 0, dummy2 = 0, dummy3 = 0;
+    while (s.p < s.n)
+    {
+        char ch = s.d[s.p];
+        if (ch == '#') { break; }
+        if (ch == '"' || ch == '\'' || ch == '`') { skipString(s); continue; }
+        if (ch == '/') { stepUnit(s, dummy1, dummy2, dummy3); continue; }
+        if (ch == '(') { paren++; }
+        else if (ch == ')') { paren--; }
+        else if (ch == '[') { brack++; }
+        else if (ch == ']') { brack--; }
+        else if (ch == '{') { brace++; }
+        else if (ch == '}') { brace--; }
+        s.p++;
+    }
+    if (paren > 0 || brack > 0 || brace > 0) { return true; }
+    // ponytail: trailing operators (arg lists without parens, dotted
+    // chains, ternaries) continue; anything else ends the logical line
+    size_t e = line.size();
+    while (e > 0 && (line[e - 1] == ' ' || line[e - 1] == '\t')) { e--; }
+    if (e == 0) { return false; }
+    char last = line[e - 1];
+    // ponytail: a lone trailing & or | closes do-block params (do |x|),
+    // only the doubled && and || continue an expression
+    if (last == '&' || last == '|')
+    {
+        return e >= 2 && line[e - 2] == last;
+    }
+    // ponytail: a trailing ? continues a ternary ("cond ?") but ends a
+    // predicate call ("tired?"); the space before it tells them apart
+    if (last == '?')
+    {
+        return e < 2 || (!isIdent(line[e - 2]) && line[e - 2] != '?'
+            && line[e - 2] != '!' && line[e - 2] != '$');
+    }
+    return last == '\\' || last == ',' || last == '.' || last == '+'
+        || last == '-' || last == '*' || last == '/' || last == '%'
+        || last == '^' || last == '<'
+        || last == '>' || last == '=' || last == ':';
+}
+
+// Splits one heredoc-free logical line on top-level ';' (string, regex,
+// comment and bracket aware). Comment-only lines stay whole.
+void splitRubyLine(const std::string& text, const LangProfile* prof,
+    std::vector<std::string>& out)
+{
+    std::string t = trimStr(text);
+    if (t.empty()) { return; }
+    if (t[0] == '#') { out.push_back(t); return; }
+    Cursor s;
+    s.d = text.c_str();
+    s.n = text.size();
+    s.p = 0;
+    s.prof = prof;
+    int paren = 0, brack = 0, brace = 0;
+    int dummy1 = 0, dummy2 = 0, dummy3 = 0;
+    size_t start = 0;
+    while (s.p < s.n)
+    {
+        char ch = s.d[s.p];
+        if (ch == '#') { break; }
+        if (ch == '"' || ch == '\'' || ch == '`') { skipString(s); continue; }
+        if (ch == '/') { stepUnit(s, dummy1, dummy2, dummy3); continue; }
+        if (ch == '(') { paren++; }
+        else if (ch == ')') { if (paren > 0) paren--; }
+        else if (ch == '[') { brack++; }
+        else if (ch == ']') { if (brack > 0) brack--; }
+        else if (ch == '{') { brace++; }
+        else if (ch == '}') { if (brace > 0) brace--; }
+        else if (ch == ';' && paren == 0 && brack == 0 && brace == 0)
+        {
+            std::string part = trimStr(text.substr(start, s.p - start));
+            if (!part.empty()) { out.push_back(part); }
+            start = s.p + 1;
+        }
+        s.p++;
+    }
+    std::string tail = trimStr(text.substr(start));
+    if (!tail.empty()) { out.push_back(tail); }
+}
+
+// Reads one logical Ruby line into segments: joins backslash, bracket and
+// operator continuations, slurps heredoc bodies verbatim, keeps =begin
+// blocks and __END__ tails whole. False at EOF (nothing appended).
+bool readRubyLine(Cursor& c, std::vector<std::string>& segs)
+{
+    // skip blank lines entirely (they carry no structure)
+    for (;;)
+    {
+        if (c.p >= c.n) { return false; }
+        size_t ls = c.p;
+        while (c.p < c.n && (c.d[c.p] == ' ' || c.d[c.p] == '\t')) { c.p++; }
+        if (c.p < c.n && c.d[c.p] != '\n' && c.d[c.p] != '\r') { break; }
+        while (c.p < c.n && c.d[c.p] != '\n') { c.p++; }
+        if (c.p < c.n) { c.p++; }
+        (void)ls;
+    }
+    // =begin ... =end block comment: one verbatim unit
+    if (c.p + 6 <= c.n && strncmp(c.d + c.p, "=begin", 6) == 0
+        && (c.p + 6 >= c.n || c.d[c.p + 6] == '\n' || c.d[c.p + 6] == '\r'
+            || c.d[c.p + 6] == ' ' || c.d[c.p + 6] == '\t'))
+    {
+        size_t start = c.p;
+        while (c.p < c.n && c.d[c.p] != '\n') { c.p++; }
+        if (c.p < c.n) { c.p++; }
+        for (;;)
+        {
+            if (c.p >= c.n) { break; }
+            size_t ls = c.p;
+            while (c.p < c.n && c.d[c.p] != '\n') { c.p++; }
+            std::string line(c.d + ls, c.p - ls);
+            if (c.p < c.n) { c.p++; }
+            if (trimStr(line) == "=end") { break; }
+        }
+        segs.push_back(trimStr(std::string(c.d + start, c.p - start)));
+        return true;
+    }
+    // __END__: the marker plus the whole data tail stay verbatim
+    {
+        size_t ls = c.p;
+        while (c.p < c.n && c.d[c.p] != '\n' && c.d[c.p] != '\r') { c.p++; }
+        std::string line(c.d + ls, c.p - ls);
+        if (trimStr(line) == "__END__")
+        {
+            if (c.p < c.n && c.d[c.p] == '\r')
+            {
+                c.p++;
+                if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+            }
+            else if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+            segs.push_back("__END__");
+            if (c.p < c.n)
+            {
+                segs.push_back(trimStr(std::string(c.d + c.p, c.n - c.p)));
+                c.p = c.n;
+            }
+            return true;
+        }
+        c.p = ls;
+    }
+    std::string acc;
+    int paren = 0, brack = 0, brace = 0;
+    bool heredoc = false;
+    for (;;)
+    {
+        size_t ls = c.p;
+        while (c.p < c.n && c.d[c.p] != '\n' && c.d[c.p] != '\r') { c.p++; }
+        std::string line(c.d + ls, c.p - ls);
+        if (c.p < c.n && c.d[c.p] == '\r')
+        {
+            c.p++;
+            if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+        }
+        else if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+        if (!acc.empty()) { acc += "\n"; }
+        acc += line;
+        // heredoc bodies ride along verbatim (brackets inside do not count)
+        std::vector<std::string> marks;
+        findRubyHeredocs(line, c.prof, marks);
+        for (size_t mi = 0; mi < marks.size(); mi++)
+        {
+            heredoc = true;
+            for (;;)
+            {
+                if (c.p >= c.n) { break; }
+                size_t bs = c.p;
+                while (c.p < c.n && c.d[c.p] != '\n' && c.d[c.p] != '\r') { c.p++; }
+                std::string body(c.d + bs, c.p - bs);
+                if (c.p < c.n && c.d[c.p] == '\r')
+                {
+                    c.p++;
+                    if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+                }
+                else if (c.p < c.n && c.d[c.p] == '\n') { c.p++; }
+                acc += "\n";
+                acc += body;
+                if (trimStr(body) == marks[mi]) { break; }
+            }
+        }
+        if (c.p < c.n && rubyJoins(line, c.prof, paren, brack, brace)) { continue; }
+        break;
+    }
+    if (heredoc) { segs.push_back(trimStr(acc)); }
+    else { splitRubyLine(acc, c.prof, segs); }
+    return true;
+}
+
+// Splits "head then rest" / "head do rest" at the first top-level then/do
+// word. Dotted and suffixed lookalikes (x.then, then?, do!) do not count.
+void splitRubyThen(const std::string& header, std::string& head,
+    std::string& rest)
+{
+    head = header;
+    rest.clear();
+    const char* d = header.c_str();
+    size_t n = header.size();
+    size_t p = 0;
+    int paren = 0, brack = 0, brace = 0;
+    char quote = 0;
+    while (p < n)
+    {
+        char ch = d[p];
+        if (quote)
+        {
+            if (ch == '\\') { p++; }
+            else if (ch == quote) { quote = 0; }
+            p++;
+            continue;
+        }
+        if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; p++; continue; }
+        if (ch == '#') { break; }
+        if (ch == '(') { paren++; }
+        else if (ch == ')') { if (paren > 0) paren--; }
+        else if (ch == '[') { brack++; }
+        else if (ch == ']') { if (brack > 0) brack--; }
+        else if (ch == '{') { brace++; }
+        else if (ch == '}') { if (brace > 0) brace--; }
+        else if ((ch == '_' || isAlpha(ch)) && paren == 0 && brack == 0 && brace == 0)
+        {
+            size_t ws = p;
+            while (p < n && (isIdent(d[p]) && d[p] != '$')) { p++; }
+            std::string word(d + ws, p - ws);
+            bool beforeOk = (ws == 0) || (!isIdent(d[ws - 1]) && d[ws - 1] != '.'
+                && d[ws - 1] != ':' && d[ws - 1] != '@' && d[ws - 1] != '$');
+            bool afterOk = (p >= n) || (!isIdent(d[p]) && d[p] != '?' && d[p] != '!');
+            if (beforeOk && afterOk && (word == "then" || word == "do"))
+            {
+                head = trimStr(header.substr(0, ws));
+                rest = trimStr(header.substr(p));
+                return;
+            }
+            continue;
+        }
+        p++;
+    }
+}
+
+// Splits a trailing top-level "end" word ("y end" -> head "y").
+// Dotted (x.end) and suffixed words never count; strings and brackets
+// stay opaque. False when the text does not end with a bare end.
+bool splitTrailingEnd(const std::string& text, std::string& head)
+{
+    const char* d = text.c_str();
+    size_t n = text.size();
+    size_t p = 0;
+    int paren = 0, brack = 0, brace = 0;
+    char quote = 0;
+    size_t found = std::string::npos;
+    while (p < n)
+    {
+        char ch = d[p];
+        if (quote)
+        {
+            if (ch == '\\') { p++; }
+            else if (ch == quote) { quote = 0; }
+            p++;
+            continue;
+        }
+        if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; p++; continue; }
+        if (ch == '#') { break; }
+        if (ch == '(') { paren++; }
+        else if (ch == ')') { if (paren > 0) paren--; }
+        else if (ch == '[') { brack++; }
+        else if (ch == ']') { if (brack > 0) brack--; }
+        else if (ch == '{') { brace++; }
+        else if (ch == '}') { if (brace > 0) brace--; }
+        else if ((ch == '_' || isAlpha(ch)) && paren == 0 && brack == 0 && brace == 0)
+        {
+            size_t ws = p;
+            while (p < n && (isIdent(d[p]) && d[p] != '$')) { p++; }
+            std::string word(d + ws, p - ws);
+            bool beforeOk = (ws == 0) || (!isIdent(d[ws - 1]) && d[ws - 1] != '.'
+                && d[ws - 1] != ':' && d[ws - 1] != '@' && d[ws - 1] != '$');
+            bool afterOk = (p >= n) || (!isIdent(d[p]) && d[p] != '?' && d[p] != '!');
+            if (beforeOk && afterOk && word == "end")
+            {
+                // ponytail: only a trailing end can be a closer; anything
+                // after it (but a comment) means hands off
+                size_t q = p;
+                while (q < n && (d[q] == ' ' || d[q] == '\t')) { q++; }
+                if (q >= n || d[q] == '#') { found = ws; }
+            }
+            continue;
+        }
+        p++;
+    }
+    if (found == std::string::npos) { return false; }
+    head = trimStr(text.substr(0, found));
+    return true;
+}
+
+// Queues an inline suite rest: splits ;-separated statements and peels a
+// trailing end closer ("if x then y end" -> y, end). Order preserved.
+void insertInlineRest(std::vector<std::string>& segs, size_t pos,
+    const std::string& rest, const LangProfile* prof)
+{
+    std::vector<std::string> parts;
+    splitRubyLine(rest, prof, parts);
+    for (size_t i = parts.size(); i > 0; i--)
+    {
+        std::string head;
+        if (splitTrailingEnd(parts[i - 1], head))
+        {
+            segs.insert(segs.begin() + pos, "end");
+            if (!head.empty()) { segs.insert(segs.begin() + pos, head); }
+        }
+        else if (!parts[i - 1].empty())
+        {
+            segs.insert(segs.begin() + pos, parts[i - 1]);
+        }
+    }
+}
+
+// True for trailing do-blocks ("call args do [|params|]"), which keep the
+// opener verbatim and nest the body. Keyword openers never reach here:
+// while/until/for strip their own do, the rest have dedicated branches.
+bool isRubyDoOpener(const std::string& t, const std::string& w)
+{
+    if (w == "def" || w == "class" || w == "module" || w == "if"
+        || w == "unless" || w == "case" || w == "when" || w == "in"
+        || w == "begin" || w == "rescue" || w == "ensure" || w == "else"
+        || w == "elsif" || w == "while" || w == "until" || w == "for"
+        || w == "end" || w == "do")
+    {
+        return false;
+    }
+    // ponytail: "do |a, b|" tails; the bars hold no nesting here
+    size_t e = t.size();
+    while (e > 0 && (t[e - 1] == ' ' || t[e - 1] == '\t')) { e--; }
+    if (e > 0 && t[e - 1] == '|')
+    {
+        size_t b = e - 1;
+        while (b > 0 && t[b - 1] != '|' && t[b - 1] != '\n') { b--; }
+        if (b == 0 || t[b - 1] == '\n') { return false; }
+        e = b - 1;
+        while (e > 0 && (t[e - 1] == ' ' || t[e - 1] == '\t')) { e--; }
+    }
+    if (e < 2 || e > t.size()) { return false; }
+    if (t.compare(e - 2, 2, "do") != 0) { return false; }
+    if (e - 2 > 0 && (isIdent(t[e - 3]) && t[e - 3] != '$')) { return false; }
+    return true;
+}
+
+} // namespace
+
+namespace {
+
+// Statuses for the Ruby recursion: EOF unwinds everything, END consumed the
+// level's closer, CONT keeps the level loop going (a rewound continuation
+// waits in the shared segments for the holder to attach it).
+enum { RB_EOF = 0, RB_END = 1, RB_CONT = 2 };
+
+int parseRubyItems(Cursor& c, std::vector<ASTNode*>& out,
+    std::vector<ASTNode*>& pending, std::vector<std::string>& segs,
+    size_t& pos, bool topLevel)
+{
+    RubyHolders held;
+    held.iff = NULL;
+    held.tcb = NULL;
+    held.sw = NULL;
+    held.def = NULL;
+    held.kind = 0;
+    for (;;)
+    {
+        if (pos >= segs.size())
+        {
+            size_t before = segs.size();
+            if (!readRubyLine(c, segs)) { return RB_EOF; }
+            if (segs.size() == before) { continue; }
+        }
+        std::string seg = segs[pos++];
+        std::string t = trimStr(seg);
+        if (t.empty()) { continue; }
+        if (t[0] == '#')
+        {
+            CommentNode* cm = ASTNodeFactory::createCommentNode();
+            cm->m_text = t.size() > 1 ? trimStr(t.substr(1)) : std::string();
+            cm->m_isBlock = false;
+            pending.push_back(cm);
+            continue;
+        }
+        for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
+        pending.clear();
+        // ponytail: continuations belong to the level holding the opener; a
+        // body rewinds a holder-less one so it bubbles to the holder (maybe
+        // levels up); only a holder-less top level keeps one verbatim
+        {
+            std::string w = firstWord(t);
+            bool cont = (w == "elsif" || w == "else" || w == "when" || w == "in"
+                || w == "rescue" || w == "ensure");
+            if (cont)
+            {
+                bool attach = false;
+                if (w == "elsif") { attach = held.iff != NULL && held.iff->m_elseBranch == NULL; }
+                else if (w == "else") { attach = held.kind != 0; }
+                else if (w == "when" || w == "in") { attach = held.sw != NULL; }
+                else if (w == "rescue") { attach = (held.tcb != NULL && held.tcb->m_finallyBlock == NULL) || (held.kind == 4 && held.def != NULL && held.tcb == NULL); }
+                else if (w == "ensure") { attach = held.tcb != NULL || (held.kind == 4 && held.def != NULL && held.tcb == NULL); }
+                if (!attach)
+                {
+                    if (!topLevel) { pos--; return RB_CONT; }
+                    out.push_back(mkRaw(t));
+                    continue;
+                }
+            }
+        }
+        int st = parseRubySegment(c, out, t, pending, segs, pos, &held, topLevel);
+        if (st == RB_END) { return RB_END; }
+        if (st == RB_EOF) { return RB_EOF; }
+    }
+}
+
+// Parses one Ruby segment. Openers push their node, then consume the body
+// through recursion; continuations mutate the pushed holder in place, so
+// nothing is ever pushed twice. RB_END closes the level, RB_EOF unwinds all.
+int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t,
+    std::vector<ASTNode*>& pending, std::vector<std::string>& segs, size_t& pos,
+    RubyHolders* held, bool topLevel)
+{
+    std::string w = firstWord(t);
+    // end closes the level (a stray top-level end stays verbatim)
+    if (w == "end")
+    {
+        std::string rest = trimStr(t.substr(3));
+        if (rest.empty())
+        {
+            if (topLevel) { out.push_back(mkRaw(t)); return RB_CONT; }
+            return RB_END;
+        }
+        if (rest[0] == '#')
+        {
+            CommentNode* cm = ASTNodeFactory::createCommentNode();
+            cm->m_text = rest.size() > 1 ? trimStr(rest.substr(1)) : std::string();
+            cm->m_isBlock = false;
+            pending.push_back(cm);
+            if (topLevel) { out.push_back(mkRaw("end")); return RB_CONT; }
+            return RB_END;
+        }
+        // ponytail: "end ..." is never valid; keep it verbatim
+        out.push_back(mkRaw(t));
+        return RB_CONT;
+    }
+    // elsif chains onto a held if/unless
+    if (w == "elsif" && held != NULL && held->iff != NULL
+        && held->iff->m_elseBranch == NULL)
+    {
+        IfStmtNode* target = held->iff;
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        std::string cond = trimStr(head.substr(5));
+        if (cond.empty())
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        IfStmtNode* elif = ASTNodeFactory::createIfStmtNode();
+        elif->m_keyword = "elsif";
+        elif->m_condition = mkValue(cond, true);
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        elif->m_thenBranch = suite;
+        target->m_elseBranch = elif;
+        held->iff = elif;
+        held->kind = 1;
+        if (st == RB_EOF) { return RB_EOF; }
+        if (st == RB_END) { held->iff = NULL; held->kind = 0; }
+        return RB_CONT;
+    }
+    // else binds to the innermost open holder (if, case, or begin)
+    if (w == "else" && held != NULL && held->kind != 0)
+    {
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        // ponytail: "else stmt" carries its suite inline with no then;
+        // a trailing comment alone keeps the whole line verbatim
+        if (trimStr(head) != "else")
+        {
+            std::string after = (t.size() > 4) ? trimStr(t.substr(4)) : std::string();
+            if (after.empty() || after[0] == '#')
+            {
+                out.push_back(mkRaw(t));
+                return RB_CONT;
+            }
+            head = "else";
+            rest = after;
+        }
+            if (held->kind == 1 && held->iff != NULL
+                && held->iff->m_elseBranch == NULL)
+            {
+                BlockNode* suite = ASTNodeFactory::createBlockNode();
+                if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+                int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+                held->iff->m_elseBranch = suite;
+                held->iff = NULL;
+                held->kind = 0;
+                if (st == RB_EOF) { return RB_EOF; }
+                return RB_CONT;
+            }
+            if (held->kind == 2 && held->sw != NULL)
+            {
+                SwitchCaseNode* arm = ASTNodeFactory::createSwitchCaseNode();
+                arm->m_pattern = mkRaw("else");
+                BlockNode* suite = ASTNodeFactory::createBlockNode();
+                if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+                int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+                arm->m_body = suite;
+                held->sw->m_cases.push_back(arm);
+                if (st == RB_EOF) { return RB_EOF; }
+                if (st == RB_END) { held->sw = NULL; held->kind = 0; }
+                return RB_CONT;
+            }
+            if (held->kind == 3 && held->tcb != NULL
+                && held->tcb->m_elseBlock == NULL
+                && held->tcb->m_finallyBlock == NULL)
+            {
+                BlockNode* suite = ASTNodeFactory::createBlockNode();
+                if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+                int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+                held->tcb->m_elseBlock = suite;
+                if (st == RB_EOF) { return RB_EOF; }
+                if (st == RB_END) { held->tcb = NULL; held->kind = 0; }
+                return RB_CONT;
+            }
+        // ponytail: doubled or misplaced else cannot attach; the holder is
+        // already pushed, so keep just the line verbatim
+        out.push_back(mkRaw(t));
+        return RB_CONT;
+    }
+    // when/in arms belong to a held case
+    if ((w == "when" || w == "in") && held != NULL && held->sw != NULL)
+    {
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        std::string pat = trimStr(head.substr(w.size()));
+        if (pat.empty())
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        SwitchCaseNode* arm = ASTNodeFactory::createSwitchCaseNode();
+        arm->m_pattern = mkRaw(head);
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        arm->m_body = suite;
+        held->sw->m_cases.push_back(arm);
+        if (st == RB_EOF) { return RB_EOF; }
+        if (st == RB_END) { held->sw = NULL; held->kind = 0; }
+        return RB_CONT;
+    }
+    // method-level rescue: no begin, so the chain nests as the def's last
+    // suite statement (a body-less TryCatch prints no begin header or end)
+    if (w == "rescue" && held != NULL && held->kind == 4 && held->def != NULL
+        && held->tcb == NULL)
+    {
+        FunctionDeclNode* fn = held->def;
+        BlockNode* db = NULL;
+        if (fn->m_body != NULL && fn->m_body->isBlock())
+        {
+            db = static_cast<BlockNode*>(fn->m_body);
+        }
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        std::string clause = trimStr(head.substr(6));
+        if (db == NULL)
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        for (size_t i = 0; i < pending.size(); i++) { db->m_statements.push_back(pending[i]); }
+        pending.clear();
+        TryCatchStmtNode* chain = ASTNodeFactory::createTryCatchStmtNode();
+        if (!clause.empty()) { chain->m_catchClause = mkIdent(clause); }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        chain->m_catchBody = suite;
+        db->m_statements.push_back(chain);
+        held->def = NULL;
+        held->tcb = chain;
+        held->kind = 3;
+        if (st == RB_EOF) { return RB_EOF; }
+        if (st == RB_END) { held->tcb = NULL; held->kind = 0; }
+        return RB_CONT;
+    }
+    // rescue extends a held begin
+    if (w == "rescue" && held != NULL && held->tcb != NULL
+        && held->tcb->m_finallyBlock == NULL)
+    {
+        TryCatchStmtNode* target = held->tcb;
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        std::string clause = trimStr(head.substr(6));
+        // ponytail: buffered comments close the previous suite, like Python
+        BlockNode* lastSuite = NULL;
+        if (!target->m_extraCatches.empty() && target->m_extraCatches.back() != NULL)
+        {
+            TryCatchStmtNode* last = static_cast<TryCatchStmtNode*>(
+                target->m_extraCatches.back());
+            if (last->m_catchBody != NULL && last->m_catchBody->isBlock())
+            {
+                lastSuite = static_cast<BlockNode*>(last->m_catchBody);
+            }
+        }
+        if (lastSuite == NULL && target->m_catchBody != NULL
+            && target->m_catchBody->isBlock())
+        {
+            lastSuite = static_cast<BlockNode*>(target->m_catchBody);
+        }
+        if (lastSuite == NULL && target->m_body != NULL
+            && target->m_body->isBlock())
+        {
+            lastSuite = static_cast<BlockNode*>(target->m_body);
+        }
+        for (size_t i = 0; i < pending.size() && lastSuite != NULL; i++)
+        {
+            lastSuite->m_statements.push_back(pending[i]);
+        }
+        pending.clear();
+            if (target->m_catchClause == NULL && target->m_catchBody == NULL
+                && target->m_extraCatches.empty())
+            {
+                if (!clause.empty()) { target->m_catchClause = mkIdent(clause); }
+                BlockNode* suite = ASTNodeFactory::createBlockNode();
+                if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+                int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+                target->m_catchBody = suite;
+                if (st == RB_EOF) { return RB_EOF; }
+                if (st == RB_END && held != NULL) { held->tcb = NULL; held->kind = 0; }
+                return RB_CONT;
+            }
+        TryCatchStmtNode* extra = ASTNodeFactory::createTryCatchStmtNode();
+        if (!clause.empty()) { extra->m_catchClause = mkIdent(clause); }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        extra->m_catchBody = suite;
+        target->m_extraCatches.push_back(extra);
+        if (st == RB_EOF) { return RB_EOF; }
+        // ponytail: an end closed the whole begin; drop the stale holder
+        if (st == RB_END && held != NULL) { held->tcb = NULL; held->kind = 0; }
+        return RB_CONT;
+    }
+    // method-level ensure (def/ensure with no rescue): same nest, only a
+    // finally block; a non-bare ensure line stays verbatim
+    if (w == "ensure" && held != NULL && held->kind == 4 && held->def != NULL
+        && held->tcb == NULL)
+    {
+        FunctionDeclNode* fn = held->def;
+        BlockNode* db = NULL;
+        if (fn->m_body != NULL && fn->m_body->isBlock())
+        {
+            db = static_cast<BlockNode*>(fn->m_body);
+        }
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        if (db == NULL || trimStr(head) != "ensure")
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        for (size_t i = 0; i < pending.size(); i++) { db->m_statements.push_back(pending[i]); }
+        pending.clear();
+        TryCatchStmtNode* chain = ASTNodeFactory::createTryCatchStmtNode();
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        chain->m_finallyBlock = suite;
+        db->m_statements.push_back(chain);
+        held->def = NULL;
+        held->tcb = chain;
+        held->kind = 3;
+        if (st == RB_EOF) { return RB_EOF; }
+        if (st == RB_END) { held->tcb = NULL; held->kind = 0; }
+        return RB_CONT;
+    }
+    // ensure closes a held begin (nothing attaches past it)
+    if (w == "ensure" && held != NULL && held->tcb != NULL
+        && held->tcb->m_finallyBlock == NULL)
+    {
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        if (trimStr(head) != "ensure")
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        held->tcb->m_finallyBlock = suite;
+        held->tcb = NULL;
+        held->kind = 0;
+        if (st == RB_EOF) { return RB_EOF; }
+        return RB_CONT;
+    }
+    // a fresh line closes open chains (every held node is already pushed)
+    if (held != NULL)
+    {
+        held->iff = NULL;
+        held->tcb = NULL;
+        held->sw = NULL;
+        held->def = NULL;
+        held->kind = 0;
+    }
+    if (w == "def")
+    {
+        std::string rest = trimStr(t.substr(3));
+        size_t lp = findTopLevel(rest, '(');
+        std::string name;
+        std::string params;
+        std::string trailer;
+        bool badDef = true;
+        if (lp != std::string::npos)
+        {
+            std::string pre = trimStr(rest.substr(0, lp));
+            if (!pre.empty() && pre.find_first_of(" \t\n(){};,") == std::string::npos)
+            {
+                Cursor sub = c;
+                sub.d = rest.c_str();
+                sub.n = rest.size();
+                sub.p = lp;
+                if (readParenGroup(sub, params))
+                {
+                    name = pre;
+                    trailer = trimStr(rest.substr(sub.p));
+                    badDef = false;
+                }
+            }
+        }
+        else
+        {
+            // ponytail: paren-less defs split on a top-level = (endless
+            // defs); ==, =>, =~ never count, findAssign already skips them
+            size_t eq = findAssign(rest);
+            if (eq != std::string::npos && rest[eq] == '='
+                && !(eq + 1 < rest.size() && rest[eq + 1] == '~'))
+            {
+                name = trimStr(rest.substr(0, eq));
+                trailer = trimStr(rest.substr(eq));
+                badDef = name.empty()
+                    || name.find_first_of(" \t\n(){};,") != std::string::npos;
+            }
+            else if (eq == std::string::npos)
+            {
+                name = rest;
+                badDef = name.empty()
+                    || name.find_first_of(" \t\n(){};,") != std::string::npos;
+            }
+        }
+        if (badDef)
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        FunctionDeclNode* node = ASTNodeFactory::createFunctionDeclNode();
+        node->m_name = name;
+        if (!trimStr(params).empty()) { node->m_params.push_back(mkIdent(trimStr(params))); }
+        // ponytail: "def f = body" is endless: one statement, no end coming
+        bool endless = !trailer.empty() && trailer[0] == '='
+            && (trailer.size() < 2 || (trailer[1] != '=' && trailer[1] != '>'));
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (endless)
+        {
+            std::string bodyText = trimStr(trailer.substr(1));
+            // ponytail: endless bodies are one statement ("def f = x; y"
+            // ends the def at ;); anything else stays verbatim, and the
+            // lone statement dispatches alone so siblings cannot leak in
+            std::vector<std::string> parts;
+            splitRubyLine(bodyText, c.prof, parts);
+            if (bodyText.empty() || parts.size() != 1)
+            {
+                out.push_back(mkRaw(t));
+                return RB_CONT;
+            }
+            node->m_body = suite;
+            // ponytail: dispatch the lone statement directly (no level
+            // loop, so no read-ahead); anything reaching past its own
+            // line rewinds and the opener stays verbatim instead
+            size_t pMark = c.p;
+            size_t op = 0;
+            RubyHolders bh;
+            bh.iff = NULL;
+            bh.tcb = NULL;
+            bh.sw = NULL;
+            bh.def = NULL;
+            bh.kind = 0;
+            parseRubySegment(c, suite->m_statements, parts[0], pending,
+                parts, op, &bh, false);
+            if (c.p != pMark)
+            {
+                c.p = pMark;
+                out.push_back(mkRaw(t));
+                return RB_CONT;
+            }
+            out.push_back(node);
+            return RB_CONT;
+        }
+        if (!trailer.empty())
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        node->m_body = suite;
+        out.push_back(node);
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        if (st == RB_EOF) { return RB_EOF; }
+        if (st == RB_END)
+        {
+            // ponytail: a clean end needs no holder; anything else rewound
+            // (rescue/ensure attach below, strays flush it away)
+            if (held != NULL) { held->def = NULL; held->kind = 0; }
+            return RB_CONT;
+        }
+        // ponytail: hold the def for a method-level rescue/ensure (no
+        // begin); any other next line releases it through the flush
+        if (held != NULL) { held->def = node; held->kind = 4; }
+        return RB_CONT;
+    }
+    if (w == "class")
+    {
+        std::string rest = trimStr(t.substr(5));
+        if (rest.empty())
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        ClassDeclNode* node = ASTNodeFactory::createClassDeclNode();
+        if (rest.size() >= 2 && rest[0] == '<' && rest[1] == '<')
+        {
+            // ponytail: singleton classes (class << self) keep it all
+            node->m_name = rest;
+        }
+        else
+        {
+            size_t lt = findTopLevel(rest, '<');
+            if (lt != std::string::npos && (lt + 1 >= rest.size() || rest[lt + 1] != '<')
+                && (lt == 0 || rest[lt - 1] != '<'))
+            {
+                node->m_name = trimStr(rest.substr(0, lt));
+                std::string sup = trimStr(rest.substr(lt + 1));
+                if (!sup.empty()) { node->m_superClass = mkIdent(sup); }
+            }
+            else
+            {
+                node->m_name = rest;
+            }
+            if (node->m_name.empty()
+                || node->m_name.find_first_of(" \t\n") != std::string::npos)
+            {
+                out.push_back(mkRaw(t));
+                return RB_CONT;
+            }
+        }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        node->m_body = suite;
+        out.push_back(node);
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        if (st == RB_EOF) { return RB_EOF; }
+        return RB_CONT;
+    }
+    if (w == "module")
+    {
+        std::string rest = trimStr(t.substr(6));
+        if (rest.empty() || rest.find_first_of(" \t\n") != std::string::npos)
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        NamespaceNode* node = ASTNodeFactory::createNamespaceNode();
+        node->m_name = rest;
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        node->m_body = suite;
+        out.push_back(node);
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        if (st == RB_EOF) { return RB_EOF; }
+        return RB_CONT;
+    }
+    if (w == "if" || w == "unless")
+    {
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        std::string cond = trimStr(head.substr(w.size()));
+        if (cond.empty())
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        IfStmtNode* node = ASTNodeFactory::createIfStmtNode();
+        node->m_keyword = w;
+        node->m_condition = mkValue(cond, true);
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        node->m_thenBranch = suite;
+        out.push_back(node);
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        if (st == RB_EOF) { return RB_EOF; }
+        if (st == RB_END)
+        {
+            if (held != NULL) { held->iff = NULL; held->kind = 0; }
+            return RB_CONT;
+        }
+        if (held != NULL) { held->iff = node; held->kind = 1; }
+        return RB_CONT;
+    }
+    if (w == "case")
+    {
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        std::string disc = trimStr(head.substr(4));
+        SwitchStmtNode* node = ASTNodeFactory::createSwitchStmtNode();
+        if (!disc.empty()) { node->m_discriminant = mkValue(disc, true); }
+        out.push_back(node);
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        // ponytail: arms arrive as level segments; stray prelude lines land
+        // after the node (they run unconditionally, order kept losslessly)
+        std::vector<ASTNode*> prelude;
+        int st = parseRubyItems(c, prelude, pending, segs, pos, false);
+        for (size_t i = 0; i < prelude.size(); i++) { out.push_back(prelude[i]); }
+        if (st == RB_EOF) { return RB_EOF; }
+        // ponytail: RB_END consumed our end; RB_CONT rewound an arm for us
+        if (st == RB_CONT && held != NULL) { held->sw = node; held->kind = 2; }
+        return RB_CONT;
+    }
+    if (w == "begin")
+    {
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        if (trimStr(head) != "begin")
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        TryCatchStmtNode* node = ASTNodeFactory::createTryCatchStmtNode();
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        node->m_body = suite;
+        out.push_back(node);
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        if (st == RB_EOF) { return RB_EOF; }
+        if (st == RB_END)
+        {
+            if (held != NULL) { held->tcb = NULL; held->kind = 0; }
+            return RB_CONT;
+        }
+        if (held != NULL) { held->tcb = node; held->kind = 3; }
+        return RB_CONT;
+    }
+    if (w == "while" || w == "until" || w == "for")
+    {
+        std::string head;
+        std::string rest;
+        splitRubyThen(t, head, rest);
+        std::string cond = trimStr(head.substr(w.size()));
+        if (cond.empty())
+        {
+            out.push_back(mkRaw(t));
+            return RB_CONT;
+        }
+        BlockNode* suite = ASTNodeFactory::createBlockNode();
+        if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+        if (w == "for")
+        {
+            ForStmtNode* node = ASTNodeFactory::createForStmtNode();
+            node->m_keyword = "for";
+            node->m_classic = false;
+            node->m_condition = mkValue(cond, true);
+            node->m_body = suite;
+            out.push_back(node);
+        }
+        else
+        {
+            WhileStmtNode* node = ASTNodeFactory::createWhileStmtNode();
+            node->m_keyword = w;
+            node->m_condition = mkValue(cond, true);
+            node->m_body = suite;
+            out.push_back(node);
+        }
+        if (st == RB_EOF) { return RB_EOF; }
+        return RB_CONT;
+    }
+    if (isRubyDoOpener(t, w))
+    {
+        // ponytail: one statement for the whole construct: the verbatim
+        // opener owns the slot line, the body nests with its own end
+        BlockNode* block = ASTNodeFactory::createBlockNode();
+        block->m_kind = "do";
+        block->m_statements.push_back(mkRaw(t));
+        int st = parseRubyItems(c, block->m_statements, pending, segs, pos, false);
+        out.push_back(block);
+        if (st == RB_EOF) { return RB_EOF; }
+        return RB_CONT;
+    }
+    if (w == "require")
+    {
+        std::string rest = trimStr(t.substr(7));
+        if (!rest.empty() && rest[0] == '(' && rest[rest.size() - 1] == ')')
+        {
+            rest = trimStr(rest.substr(1, rest.size() - 2));
+        }
+        bool quoted = rest.size() >= 2
+            && ((rest[0] == '"' && rest[rest.size() - 1] == '"')
+                || (rest[0] == '\'' && rest[rest.size() - 1] == '\''));
+        if (quoted && findTopLevel(rest, ',') == std::string::npos)
+        {
+            ImportDeclNode* node = ASTNodeFactory::createImportDeclNode();
+            node->m_source = rest.substr(1, rest.size() - 2);
+            out.push_back(node);
+            return RB_CONT;
+        }
+        // ponytail: dynamic/multi requires keep their exact text
+        out.push_back(mkRaw(t));
+        return RB_CONT;
+    }
+    // ponytail: return/raise/assignments/calls/modifiers round-trip through
+    // the shared statement parser (trailing comments ride along verbatim).
+    // Ruby throw is not raise (different control flow), so it stays raw.
+    if (w == "throw")
+    {
+        out.push_back(mkRaw(t));
+        return RB_CONT;
+    }
+    {
+        ASTNode* stmt = parseStatementText(c.prof, t);
+        if (stmt != NULL)
+        {
+            out.push_back(stmt);
+            return RB_CONT;
+        }
+        out.push_back(mkRaw(t));
+        return RB_CONT;
+    }
+}
+
+} // namespace
+
 ProgramNode* Parser::parseNested(const char* source, size_t len, const std::string& language)
 {
     if (source == NULL || len == 0)
@@ -3448,6 +5828,22 @@ ProgramNode* Parser::parseNested(const char* source, size_t len, const std::stri
     c.p = 0;
     c.prof = profileFor(language);
     ProgramNode* prog = ASTNodeFactory::createProgramNode();
+    if (language == "python")
+    {
+        std::vector<ASTNode*> pending;
+        parsePythonItems(c, prog->m_statements, -1, pending);
+        for (size_t i = 0; i < pending.size(); i++) { prog->m_statements.push_back(pending[i]); }
+        return prog;
+    }
+    if (language == "ruby")
+    {
+        std::vector<ASTNode*> pending;
+        std::vector<std::string> segs;
+        size_t pos = 0;
+        parseRubyItems(c, prog->m_statements, pending, segs, pos, true);
+        for (size_t i = 0; i < pending.size(); i++) { prog->m_statements.push_back(pending[i]); }
+        return prog;
+    }
     parseItems(c, prog->m_statements);
     return prog;
 }
