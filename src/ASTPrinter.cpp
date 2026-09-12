@@ -78,7 +78,7 @@ void ASTPrinter::visitFunctionDecl(FunctionDeclNode& node)
     printf("FunctionDeclNode\n");
     m_indentLevel++;
     printIndent();
-    printf("name: %s\n", node.m_name.c_str());
+    printf("name: %s%s\n", node.m_name.c_str(), node.m_endless ? " (endless)" : "");
     {
         std::vector<ASTNode*>::size_type i;
         for (i = 0; i < node.m_params.size(); i++)
