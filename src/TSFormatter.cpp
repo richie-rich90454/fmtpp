@@ -1,5 +1,7 @@
 #include "fmtpp/TSFormatter.hpp"
 #include "fmtpp/ast/FunctionDeclNode.hpp"
+#include "fmtpp/ast/VariableDeclNode.hpp"
+#include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/InterfaceDeclNode.hpp"
 #include "fmtpp/ast/EnumDeclNode.hpp"
 #include "fmtpp/ast/TypeAliasNode.hpp"
@@ -19,6 +21,12 @@ TSFormatter::~TSFormatter()
 
 void TSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
 {
+    // ponytail: export/async ride in m_modifiers so nothing is dropped
+    if (!node.m_modifiers.empty())
+    {
+        printToken(node.m_modifiers.c_str());
+        printSpace();
+    }
     printToken("function");
     if (spaceAfterKeywords()) { printSpace(); }
     printToken(node.m_name.c_str());
@@ -33,6 +41,38 @@ void TSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
     if (!node.m_returnType.empty()) { printToken(": "); printToken(node.m_returnType.c_str()); }
     if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
     else { printSemicolon(); printNewline(); }
+}
+
+void TSFormatter::visitVariableDeclNode(VariableDeclNode& node)
+{
+    // TS: kind name[: Type] [= init]; — the type must never be dropped
+    if (!node.m_kind.empty())
+    {
+        printToken(node.m_kind.c_str());
+        printSpace();
+    }
+    printToken(node.m_name.c_str());
+    if (!node.m_type.empty())
+    {
+        printToken(": ");
+        printToken(node.m_type.c_str());
+    }
+    if (node.m_initializer != NULL) { printToken(" = "); node.m_initializer->accept(*this); }
+    printSemicolonIfNeeded(&node);
+    printNewline();
+}
+
+void TSFormatter::visitPropertyNode(PropertyNode& node)
+{
+    // TS interface/object-type member: key[: Type];
+    if (node.m_key != NULL) { node.m_key->accept(*this); }
+    if (node.m_value != NULL)
+    {
+        printToken(": ");
+        node.m_value->accept(*this);
+    }
+    printSemicolonIfNeeded(&node);
+    printNewline();
 }
 
 void TSFormatter::visitInterfaceDeclNode(InterfaceDeclNode& node)
