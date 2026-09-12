@@ -1,5 +1,6 @@
 #pragma once
 #include "fmtpp/ASTNode.hpp"
+#include <string>
 
 class ASTVisitor;
 
@@ -21,8 +22,14 @@ public:
     /** @see ASTNode::accept */
     virtual void accept(ASTVisitor& visitor);
 
+    /** @see ASTNode::isIfStmt */
+    virtual bool isIfStmt() const { return true; }
+
     /** Condition expression. */
     ASTNode* m_condition;
+
+    /** Keyword: "if" (default when empty) or "unless". */
+    std::string m_keyword;
 
     /** Then-branch (BlockNode or statement). */
     ASTNode* m_thenBranch;
