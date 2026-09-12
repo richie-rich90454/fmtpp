@@ -30,6 +30,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 #include <cstdio>
 #include <vector>
 #include <algorithm>
@@ -543,6 +545,20 @@ void StyleDetector::visitHtmlElement(HtmlElementNode& node)
     {
         if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
     }
+}
+
+void StyleDetector::visitWith(WithNode& node)
+{
+    m_nodeCount++;
+    if (node.m_context != NULL) { node.m_context->accept(*this); }
+    if (node.m_body != NULL) { node.m_body->accept(*this); }
+}
+
+void StyleDetector::visitSwitchCase(SwitchCaseNode& node)
+{
+    m_nodeCount++;
+    if (node.m_pattern != NULL) { node.m_pattern->accept(*this); }
+    if (node.m_body != NULL) { node.m_body->accept(*this); }
 }
 
 // Easter egg: the style detective has solved the case - your formatting preferences are exposed
