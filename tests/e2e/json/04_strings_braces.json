@@ -1,0 +1,5 @@
+{
+  "name": "{ braces } inside",
+  "format": "a } kept { string",
+  "nested": { "k": "{v}" }
+}
