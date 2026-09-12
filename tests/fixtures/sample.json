@@ -1,0 +1,11 @@
+{
+  "name": "fmtpp",
+  "version": "0.1.0",
+  "private": false,
+  "scripts": {
+    "format": "fmtpp format src/main.js"
+  },
+  "dependencies": {
+    "react": "^19.0.0"
+  }
+}
