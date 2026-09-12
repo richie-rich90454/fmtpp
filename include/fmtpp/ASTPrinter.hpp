@@ -47,6 +47,8 @@ public:
     virtual void visitPreprocessorDirective(PreprocessorDirectiveNode& node);
     virtual void visitNamespace(NamespaceNode& node);
     virtual void visitProperty(PropertyNode& node);
+    virtual void visitRawText(RawTextNode& node);
+    virtual void visitHtmlElement(HtmlElementNode& node);
 
 private:
     /**
