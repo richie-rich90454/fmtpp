@@ -9,14 +9,8 @@
 #include "fmtpp/OutputBuffer.hpp"
 #include "fmtpp/Config.hpp"
 #include "fmtpp/ConfigBuilder.hpp"
-#include "fmtpp/JSFormatter.hpp"
-#include "fmtpp/TSFormatter.hpp"
-#include "fmtpp/JavaFormatter.hpp"
-#include "fmtpp/CFormatter.hpp"
-#include "fmtpp/CppFormatter.hpp"
-#include "fmtpp/CSharpFormatter.hpp"
-#include "fmtpp/GoFormatter.hpp"
-#include "fmtpp/RustFormatter.hpp"
+#include "fmtpp/FormatterFactory.hpp"
+#include "fmtpp/FormatterVisitor.hpp"
 #include "CLI/CLI.hpp"
 
 #include <cstdio>
@@ -139,7 +133,9 @@ void FormatterApp::printUsage()
     printf("  format FILE...    Format one or more files\n");
     printf("  bench FILE        Run performance benchmark\n");
     printf("  FILE              Format a single file\n");
-    printf("\nSupported languages: js, ts, java, c, cpp, cs, go, rust\n");
+    printf("\nSupported languages: js, ts, java, c, cpp, cs, go, rs,\n");
+    printf("  kotlin, swift, dart, php, scala, objc, zig, d, groovy,\n");
+    printf("  solidity, v, glsl, html, css, json, vue\n");
     printf("\nfmtpp - formatting code with style and zero leaks\n");
 }
 
@@ -346,55 +342,18 @@ int FormatterApp::runFormatSingle(const std::string& filepath)
     }
 
     Parser parser;
-    ProgramNode* ast = parser.parse(source);
+    std::string language = FormatterFactory::detectLanguage(filepath.c_str());
+    ProgramNode* ast = parser.parse(source, language);
     if (ast == NULL)
     {
         printf("Error: Cannot parse file: %s\n", filepath.c_str());
         return 1;
     }
 
-    std::string language = detectLanguage(filepath.c_str());
     // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
     Config config = ConfigBuilder::buildForFile(filepath);
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
-    FormatterVisitor* formatter = NULL;
-
-    if (language == "js" || language == "javascript")
-    {
-        formatter = new JSFormatter(out, config);
-    }
-    else if (language == "ts" || language == "typescript")
-    {
-        formatter = new TSFormatter(out, config);
-    }
-    else if (language == "java")
-    {
-        formatter = new JavaFormatter(out, config);
-    }
-    else if (language == "c")
-    {
-        formatter = new CFormatter(out, config);
-    }
-    else if (language == "cpp" || language == "c++")
-    {
-        formatter = new CppFormatter(out, config);
-    }
-    else if (language == "cs" || language == "csharp" || language == "c#")
-    {
-        formatter = new CSharpFormatter(out, config);
-    }
-    else if (language == "go")
-    {
-        formatter = new GoFormatter(out, config);
-    }
-    else if (language == "rs" || language == "rust")
-    {
-        formatter = new RustFormatter(out, config);
-    }
-    else
-    {
-        formatter = new JSFormatter(out, config);
-    }
+    FormatterVisitor* formatter = FormatterFactory::create(language, out, config);
 
     if (formatter != NULL)
     {
@@ -409,52 +368,5 @@ int FormatterApp::runFormatSingle(const std::string& filepath)
 
 std::string FormatterApp::detectLanguage(const char* filepath)
 {
-    if (filepath == NULL)
-    {
-        return "js";
-    }
-
-    const char* dot = strrchr(filepath, '.');
-    if (dot == NULL)
-    {
-        return "js";
-    }
-
-    const char* ext = dot + 1;
-
-    if (strcmp(ext, "js") == 0 || strcmp(ext, "mjs") == 0 || strcmp(ext, "cjs") == 0)
-    {
-        return "js";
-    }
-    if (strcmp(ext, "ts") == 0 || strcmp(ext, "tsx") == 0 || strcmp(ext, "mts") == 0)
-    {
-        return "ts";
-    }
-    if (strcmp(ext, "java") == 0)
-    {
-        return "java";
-    }
-    if (strcmp(ext, "c") == 0 || strcmp(ext, "h") == 0)
-    {
-        return "c";
-    }
-    if (strcmp(ext, "cpp") == 0 || strcmp(ext, "cc") == 0 || strcmp(ext, "cxx") == 0 ||
-        strcmp(ext, "hpp") == 0 || strcmp(ext, "hh") == 0 || strcmp(ext, "hxx") == 0)
-    {
-        return "cpp";
-    }
-    if (strcmp(ext, "cs") == 0)
-    {
-        return "cs";
-    }
-    if (strcmp(ext, "go") == 0)
-    {
-        return "go";
-    }
-    if (strcmp(ext, "rs") == 0)
-    {
-        return "rs";
-    }
-
-    return "js";
+    return FormatterFactory::detectLanguage(filepath);
 }
