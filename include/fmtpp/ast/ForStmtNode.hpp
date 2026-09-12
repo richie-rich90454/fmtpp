@@ -39,4 +39,7 @@ public:
 
     /** Loop body (BlockNode). */
     ASTNode* m_body;
+
+    /** Optional else suite (Python for/else). NULL when absent. */
+    ASTNode* m_elseBlock;
 };
