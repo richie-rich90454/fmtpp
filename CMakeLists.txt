@@ -154,6 +154,7 @@ set(FMTPP_TESTS
   test_cssformatter
   test_dartformatter
   test_dformatter
+  test_e2e
   test_formatter_visitor
   test_goformatter
   test_groovyformatter
@@ -167,8 +168,10 @@ set(FMTPP_TESTS
   test_outputbuffer
   test_parser
   test_phpformatter
+  test_pye2e
   test_pythonformatter
   test_raii_wrappers
+  test_rbe2e
   test_rustformatter
   test_rubyformatter
   test_scalaformatter
