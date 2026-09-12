@@ -31,3 +31,29 @@ case 3.14:
 default:
     break
 }
+
+// helpers below
+enum Size: Int {
+    case small = 0
+    case large = 1
+}
+
+func total(_ xs: [Int]) -> Int {
+    var sum = 0
+    for x in xs {
+        sum += x
+    }
+    var left = sum
+    while left > 100 {
+        left -= 100
+    }
+    return left
+}
+
+func label(_ n: Int) -> String {
+    // braces { } inside comments are fine
+    if n <= 0 {
+        return "none"
+    }
+    return "some"
+}
