@@ -4,7 +4,9 @@
 
 // Easter egg: the memory pool awakens - releasing the kraken... I mean, the memory
 
-MemoryPool* g_pool = NULL;
+// ponytail: thread-local, so worker threads never share (or clobber) pools.
+// Each thread's most recently constructed pool serves its allocations.
+thread_local MemoryPool* g_pool = NULL;
 
 MemoryPool::MemoryPool(size_t poolSize)
     : m_pool(static_cast<char*>(malloc(poolSize)))
