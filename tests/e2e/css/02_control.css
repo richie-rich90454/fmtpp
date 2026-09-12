@@ -1,0 +1,20 @@
+@import "theme.css";
+
+/* link states and menus */
+a:hover, .menu > li {
+  text-decoration: none !important;
+  color: blue;
+}
+
+.card {
+  padding: 8px;
+}
+
+@media screen {
+  .app {
+    width: 100%;
+  }
+  .card {
+    border: none;
+  }
+}
