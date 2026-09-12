@@ -47,6 +47,8 @@ public:
     virtual void visitProperty(PropertyNode& node);
     virtual void visitRawText(RawTextNode& node);
     virtual void visitHtmlElement(HtmlElementNode& node);
+    virtual void visitWith(WithNode& node);
+    virtual void visitSwitchCase(SwitchCaseNode& node);
 
 protected:
     /** Visit a child node, skipping NULL */
@@ -90,5 +92,7 @@ protected:
     virtual void visitPropertyNode(PropertyNode& node);
     virtual void visitRawTextNode(RawTextNode& node);
     virtual void visitHtmlElementNode(HtmlElementNode& node);
+    virtual void visitWithNode(WithNode& node);
+    virtual void visitSwitchCaseNode(SwitchCaseNode& node);
     virtual void visitThrowStmtNode(ThrowStmtNode& node);
 };
