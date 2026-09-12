@@ -215,6 +215,32 @@ int main()
         else { printf("Test 7 (member var): FAILED\n"); failed++; }
     }
 
+    // Test 8: C++ struct keeps its kind (not rewritten to class)
+    {
+        OutputBuffer out(4096);
+        Config config;
+        CppFormatter formatter(out, config);
+
+        ProgramNode* prog = ASTNodeFactory::createProgramNode();
+        ClassDeclNode* cls = ASTNodeFactory::createClassDeclNode();
+        cls->m_name = "Point";
+        cls->m_kind = "struct";
+        BlockNode* clsBody = ASTNodeFactory::createBlockNode();
+        cls->m_body = clsBody;
+        prog->m_statements.push_back(cls);
+
+        formatter.format(prog);
+
+        const char* result = out.getData();
+        printf("Test 8 output: [%s]\n", result);
+
+        bool ok = true;
+        if (strstr(result, "struct Point") == NULL) { printf("  FAIL: missing 'struct Point'\n"); ok = false; }
+        if (strstr(result, "class Point") != NULL) { printf("  FAIL: struct rewritten to class\n"); ok = false; }
+        if (ok) { printf("Test 8 (struct kind): PASSED\n"); passed++; }
+        else { printf("Test 8 (struct kind): FAILED\n"); failed++; }
+    }
+
     printf("\n========================================\n");
     printf("CppFormatter tests: %d passed, %d failed\n", passed, failed);
     printf("========================================\n");
