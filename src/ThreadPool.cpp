@@ -3,15 +3,10 @@
 #include "fmtpp/Parser.hpp"
 #include "fmtpp/Config.hpp"
 #include "fmtpp/ConfigBuilder.hpp"
+#include "fmtpp/MemoryPool.hpp"
 #include "fmtpp/OutputBuffer.hpp"
-#include "fmtpp/JSFormatter.hpp"
-#include "fmtpp/TSFormatter.hpp"
-#include "fmtpp/JavaFormatter.hpp"
-#include "fmtpp/CFormatter.hpp"
-#include "fmtpp/CppFormatter.hpp"
-#include "fmtpp/CSharpFormatter.hpp"
-#include "fmtpp/GoFormatter.hpp"
-#include "fmtpp/RustFormatter.hpp"
+#include "fmtpp/FormatterFactory.hpp"
+#include "fmtpp/FormatterVisitor.hpp"
 #include <cstdio>
 #include <thread>
 #include <mutex>
@@ -111,7 +106,13 @@ std::string ThreadPool::formatFile(const std::string& filepath, const std::strin
     }
 
     Parser parser;
-    ProgramNode* ast = parser.parse(source);
+    // ponytail: detect per file so mixed-extension runs format each correctly
+    std::string fileLanguage = FormatterFactory::detectLanguage(filepath.c_str());
+    if (fileLanguage == "js" && language != "js" && language != "javascript")
+    {
+        fileLanguage = language;
+    }
+    ProgramNode* ast = parser.parse(source, fileLanguage);
     if (ast == NULL)
     {
         return std::string();
@@ -120,46 +121,7 @@ std::string ThreadPool::formatFile(const std::string& filepath, const std::strin
     // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
     Config config = ConfigBuilder::buildForFile(filepath);
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
-    FormatterVisitor* formatter = NULL;
-
-    // Select formatter based on language
-    if (language == "js" || language == "javascript")
-    {
-        formatter = new JSFormatter(out, config);
-    }
-    else if (language == "ts" || language == "typescript")
-    {
-        formatter = new TSFormatter(out, config);
-    }
-    else if (language == "java")
-    {
-        formatter = new JavaFormatter(out, config);
-    }
-    else if (language == "c")
-    {
-        formatter = new CFormatter(out, config);
-    }
-    else if (language == "cpp" || language == "c++")
-    {
-        formatter = new CppFormatter(out, config);
-    }
-    else if (language == "cs" || language == "csharp" || language == "c#")
-    {
-        formatter = new CSharpFormatter(out, config);
-    }
-    else if (language == "go")
-    {
-        formatter = new GoFormatter(out, config);
-    }
-    else if (language == "rs" || language == "rust")
-    {
-        formatter = new RustFormatter(out, config);
-    }
-    else
-    {
-        // Default to JavaScript
-        formatter = new JSFormatter(out, config);
-    }
+    FormatterVisitor* formatter = FormatterFactory::create(fileLanguage, out, config);
 
     if (formatter != NULL)
     {
@@ -185,6 +147,10 @@ std::vector<std::string> ThreadPool::parallelFormat(
     for (i = 0; i < m_numWorkers; i++)
     {
         workers.push_back(std::thread([&queue]() {
+            // ponytail: one pool per worker thread; the constructor
+            // registers it as this thread's g_pool automatically.
+            static thread_local MemoryPool workerPool(10 * 1024 * 1024);
+            (void)workerPool;
             FormatTask task;
             while (queue.getTask(task))
             {
