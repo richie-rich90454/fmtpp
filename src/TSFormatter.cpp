@@ -27,8 +27,12 @@ void TSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
         printToken(node.m_modifiers.c_str());
         printSpace();
     }
-    printToken("function");
-    if (spaceAfterKeywords()) { printSpace(); }
+    // ponytail: constructors print bare (see JSFormatter)
+    if (!node.m_modifiers.empty() || node.m_name != "constructor")
+    {
+        printToken("function");
+        if (spaceAfterKeywords()) { printSpace(); }
+    }
     printToken(node.m_name.c_str());
     printToken("(");
     size_t pc = node.m_params.size();
@@ -95,7 +99,16 @@ void TSFormatter::visitInterfaceDeclNode(InterfaceDeclNode& node)
 
 void TSFormatter::visitEnumDeclNode(EnumDeclNode& node)
 {
-    printToken("enum");
+    // ponytail: modifiers ride in the kind ("const enum"); bare and plain
+    // "enum" print the keyword, anything else prints verbatim
+    if (!node.m_kind.empty() && node.m_kind != "enum")
+    {
+        printToken(node.m_kind.c_str());
+    }
+    else
+    {
+        printToken("enum");
+    }
     printSpace();
     printToken(node.m_name.c_str());
     printOpeningBrace();
