@@ -24,6 +24,18 @@ public:
      */
     Config detect(ASTNode* root);
 
+    /**
+     * Analyzes raw source text and returns detected style configuration.
+     * Measures indentation (tabs vs spaces, width), line widths, statement
+     * semicolons, quote style, brace placement and line endings directly
+     * from the bytes, so it works without a parsed AST.
+     * Anything with no clear majority keeps the default value.
+     * @param data Source bytes (need not be NUL-terminated).
+     * @param len Number of bytes in data.
+     * @return Config with detected style preferences.
+     */
+    Config detectFromSource(const char* data, size_t len);
+
     // --- Visitor methods ---
     virtual void visitProgram(ProgramNode& node);
     virtual void visitFunctionDecl(FunctionDeclNode& node);
