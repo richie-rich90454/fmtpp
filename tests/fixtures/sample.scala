@@ -22,3 +22,29 @@ object Main {
         }
     }
 }
+
+// extra domain below
+trait Pet {
+    def speak(): String
+}
+
+case class Point(x: Int, y: Int)
+
+object Stats {
+    def total(xs: List[Int]): Int = {
+        var sum = 0
+        for (x <- xs) {
+            sum += x
+        }
+        var left = sum
+        while (left > 100) {
+            left -= 100
+        }
+        left
+    }
+
+    // braces { } in comments stay put
+    def label(n: Int): String = {
+        if (n <= 0) "none" else "some"
+    }
+}
