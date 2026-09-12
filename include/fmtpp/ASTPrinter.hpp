@@ -49,6 +49,8 @@ public:
     virtual void visitProperty(PropertyNode& node);
     virtual void visitRawText(RawTextNode& node);
     virtual void visitHtmlElement(HtmlElementNode& node);
+    virtual void visitWith(WithNode& node);
+    virtual void visitSwitchCase(SwitchCaseNode& node);
 
 private:
     /**
