@@ -26,6 +26,8 @@
 #include "fmtpp/ast/PreprocessorDirectiveNode.hpp"
 #include "fmtpp/ast/NamespaceNode.hpp"
 #include "fmtpp/ast/PropertyNode.hpp"
+#include "fmtpp/ast/RawTextNode.hpp"
+#include "fmtpp/ast/HtmlElementNode.hpp"
 
 // Easter egg: the accept() implementations - the bridge between nodes and visitors
 
@@ -50,7 +52,7 @@ IfStmtNode::IfStmtNode() : m_condition(NULL), m_thenBranch(NULL), m_elseBranch(N
 IfStmtNode::~IfStmtNode() {}
 void IfStmtNode::accept(ASTVisitor& visitor) { visitor.visitIfStmt(*this); }
 
-ForStmtNode::ForStmtNode() : m_init(NULL), m_condition(NULL), m_update(NULL), m_body(NULL) {}
+ForStmtNode::ForStmtNode() : m_init(NULL), m_condition(NULL), m_update(NULL), m_classic(true), m_body(NULL) {}
 ForStmtNode::~ForStmtNode() {}
 void ForStmtNode::accept(ASTVisitor& visitor) { visitor.visitForStmt(*this); }
 
@@ -74,7 +76,7 @@ ThrowStmtNode::ThrowStmtNode() : m_expression(NULL) {}
 ThrowStmtNode::~ThrowStmtNode() {}
 void ThrowStmtNode::accept(ASTVisitor& visitor) { visitor.visitThrowStmt(*this); }
 
-TryCatchStmtNode::TryCatchStmtNode() : m_body(NULL), m_catchClause(NULL), m_finallyBlock(NULL) {}
+TryCatchStmtNode::TryCatchStmtNode() : m_body(NULL), m_catchClause(NULL), m_catchBody(NULL), m_finallyBlock(NULL) {}
 TryCatchStmtNode::~TryCatchStmtNode() {}
 void TryCatchStmtNode::accept(ASTVisitor& visitor) { visitor.visitTryCatchStmt(*this); }
 
@@ -141,4 +143,12 @@ void NamespaceNode::accept(ASTVisitor& visitor) { visitor.visitNamespace(*this);
 PropertyNode::PropertyNode() : m_key(NULL), m_value(NULL) {}
 PropertyNode::~PropertyNode() {}
 void PropertyNode::accept(ASTVisitor& visitor) { visitor.visitProperty(*this); }
+
+RawTextNode::RawTextNode() {}
+RawTextNode::~RawTextNode() {}
+void RawTextNode::accept(ASTVisitor& visitor) { visitor.visitRawText(*this); }
+
+HtmlElementNode::HtmlElementNode() : m_selfClosing(false) {}
+HtmlElementNode::~HtmlElementNode() {}
+void HtmlElementNode::accept(ASTVisitor& visitor) { visitor.visitHtmlElement(*this); }
 
