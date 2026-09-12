@@ -36,15 +36,27 @@ See [Building](./building.md) for platform notes and cross-compilation.
 
 ```sh
 fmtpp format src/main.js
-fmtpp src/main.js          # shorthand for a single file
+fmtpp src/main.js            # shorthand for a single file
 fmtpp format a.js b.go c.rs  # multi-file (parallel) run
 ```
 
-Single-file output goes to stdout; redirect it to rewrite in place:
+Single-file output goes to stdout and never touches the original file;
+redirect it to rewrite in place:
 
 ```sh
 fmtpp format main.js > main.js.tmp && mv main.js.tmp main.js
 ```
+
+Multi-file runs print a per-file status report instead of code:
+
+```text
+Formatting 3 files with 16 threads...
+  Formatted: a.js
+Done: 3 succeeded, 0 failed
+```
+
+Which `.fmtpp.toml` applies? The one found from the formatted file's
+own directory upward — see [Configuration](./configuration.md).
 
 ## Next steps
 
