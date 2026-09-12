@@ -28,6 +28,8 @@
 #include "fmtpp/ast/PreprocessorDirectiveNode.hpp"
 #include "fmtpp/ast/NamespaceNode.hpp"
 #include "fmtpp/ast/PropertyNode.hpp"
+#include "fmtpp/ast/RawTextNode.hpp"
+#include "fmtpp/ast/HtmlElementNode.hpp"
 #include <cstdio>
 #include <vector>
 #include <algorithm>
@@ -311,9 +313,10 @@ void StyleDetector::visitProgram(ProgramNode& node)
 
 void StyleDetector::visitFunctionDecl(FunctionDeclNode& node)
 {
+    // ponytail: AST nodes carry no style evidence (no positions, no quote
+    // chars), so AST traversal only takes a node census. Real style comes
+    // from detectFromSource(). Nothing is assumed here.
     m_nodeCount++;
-    m_semicolonCount++; // Assume function declarations have semicolons or braces
-    m_sameLineBraceCount++;
     if (node.m_body != NULL)
     {
         node.m_body->accept(*this);
@@ -323,7 +326,6 @@ void StyleDetector::visitFunctionDecl(FunctionDeclNode& node)
 void StyleDetector::visitVariableDecl(VariableDeclNode& node)
 {
     m_nodeCount++;
-    m_semicolonCount++;
     if (node.m_initializer != NULL)
     {
         node.m_initializer->accept(*this);
@@ -333,7 +335,6 @@ void StyleDetector::visitVariableDecl(VariableDeclNode& node)
 void StyleDetector::visitIfStmt(IfStmtNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     if (node.m_condition != NULL) { node.m_condition->accept(*this); }
     if (node.m_thenBranch != NULL) { node.m_thenBranch->accept(*this); }
     if (node.m_elseBranch != NULL) { node.m_elseBranch->accept(*this); }
@@ -342,7 +343,6 @@ void StyleDetector::visitIfStmt(IfStmtNode& node)
 void StyleDetector::visitForStmt(ForStmtNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     if (node.m_init != NULL) { node.m_init->accept(*this); }
     if (node.m_condition != NULL) { node.m_condition->accept(*this); }
     if (node.m_update != NULL) { node.m_update->accept(*this); }
@@ -352,7 +352,6 @@ void StyleDetector::visitForStmt(ForStmtNode& node)
 void StyleDetector::visitWhileStmt(WhileStmtNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     if (node.m_condition != NULL) { node.m_condition->accept(*this); }
     if (node.m_body != NULL) { node.m_body->accept(*this); }
 }
@@ -360,7 +359,6 @@ void StyleDetector::visitWhileStmt(WhileStmtNode& node)
 void StyleDetector::visitSwitchStmt(SwitchStmtNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     if (node.m_discriminant != NULL) { node.m_discriminant->accept(*this); }
     size_t i;
     for (i = 0; i < node.m_cases.size(); i++)
@@ -382,23 +380,21 @@ void StyleDetector::visitBlock(BlockNode& node)
 void StyleDetector::visitReturnStmt(ReturnStmtNode& node)
 {
     m_nodeCount++;
-    m_semicolonCount++;
     if (node.m_argument != NULL) { node.m_argument->accept(*this); }
 }
 
 void StyleDetector::visitThrowStmt(ThrowStmtNode& node)
 {
     m_nodeCount++;
-    m_semicolonCount++;
     if (node.m_expression != NULL) { node.m_expression->accept(*this); }
 }
 
 void StyleDetector::visitTryCatchStmt(TryCatchStmtNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     if (node.m_body != NULL) { node.m_body->accept(*this); }
     if (node.m_catchClause != NULL) { node.m_catchClause->accept(*this); }
+    if (node.m_catchBody != NULL) { node.m_catchBody->accept(*this); }
     if (node.m_finallyBlock != NULL) { node.m_finallyBlock->accept(*this); }
 }
 
@@ -409,17 +405,10 @@ void StyleDetector::visitComment(CommentNode&)
 
 void StyleDetector::visitLiteral(LiteralNode& node)
 {
+    // ponytail: literal values carry no quote characters, so quote style
+    // is unobservable here. See detectFromSource().
     m_nodeCount++;
-    // Count single vs double quotes
-    if (node.m_type == LiteralNode::TYPE_STRING)
-    {
-        if (!node.m_value.empty())
-        {
-            // Check if the original source used single quotes
-            // This is a heuristic - we count patterns
-            m_doubleQuoteCount++;
-        }
-    }
+    (void)node;
 }
 
 void StyleDetector::visitIdentifier(IdentifierNode&)
@@ -475,7 +464,6 @@ void StyleDetector::visitArrowFunction(ArrowFunctionNode& node)
 void StyleDetector::visitClassDecl(ClassDeclNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     if (node.m_superClass != NULL) { node.m_superClass->accept(*this); }
     if (node.m_body != NULL) { node.m_body->accept(*this); }
 }
@@ -483,7 +471,6 @@ void StyleDetector::visitClassDecl(ClassDeclNode& node)
 void StyleDetector::visitInterfaceDecl(InterfaceDeclNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     size_t i;
     for (i = 0; i < node.m_extends.size(); i++)
     {
@@ -495,7 +482,6 @@ void StyleDetector::visitInterfaceDecl(InterfaceDeclNode& node)
 void StyleDetector::visitEnumDecl(EnumDeclNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     size_t i;
     for (i = 0; i < node.m_members.size(); i++)
     {
@@ -506,14 +492,12 @@ void StyleDetector::visitEnumDecl(EnumDeclNode& node)
 void StyleDetector::visitTypeAlias(TypeAliasNode& node)
 {
     m_nodeCount++;
-    m_semicolonCount++;
     if (node.m_typeAnnotation != NULL) { node.m_typeAnnotation->accept(*this); }
 }
 
 void StyleDetector::visitImportDecl(ImportDeclNode& node)
 {
     m_nodeCount++;
-    m_semicolonCount++;
     if (node.m_defaultImport != NULL) { node.m_defaultImport->accept(*this); }
     size_t i;
     for (i = 0; i < node.m_specifiers.size(); i++)
@@ -525,7 +509,6 @@ void StyleDetector::visitImportDecl(ImportDeclNode& node)
 void StyleDetector::visitExportDecl(ExportDeclNode& node)
 {
     m_nodeCount++;
-    m_semicolonCount++;
     if (node.m_declaration != NULL) { node.m_declaration->accept(*this); }
 }
 
@@ -537,7 +520,6 @@ void StyleDetector::visitPreprocessorDirective(PreprocessorDirectiveNode&)
 void StyleDetector::visitNamespace(NamespaceNode& node)
 {
     m_nodeCount++;
-    m_sameLineBraceCount++;
     if (node.m_body != NULL) { node.m_body->accept(*this); }
 }
 
@@ -546,6 +528,21 @@ void StyleDetector::visitProperty(PropertyNode& node)
     m_nodeCount++;
     if (node.m_key != NULL) { node.m_key->accept(*this); }
     if (node.m_value != NULL) { node.m_value->accept(*this); }
+}
+
+void StyleDetector::visitRawText(RawTextNode&)
+{
+    m_nodeCount++;
+}
+
+void StyleDetector::visitHtmlElement(HtmlElementNode& node)
+{
+    m_nodeCount++;
+    size_t i;
+    for (i = 0; i < node.m_children.size(); i++)
+    {
+        if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
+    }
 }
 
 // Easter egg: the style detective has solved the case - your formatting preferences are exposed
