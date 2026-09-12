@@ -152,6 +152,10 @@ int main()
                 { "\"a\"", "1", NULL, NULL } },
             { "vue", "<template>\n<p>hi</p>\n</template>\n",
                 { "<template>", "<p>hi</p>", "</template>", NULL } },
+            { "python", "import os\ndef add(a, b=1):\nreturn a + b\n",
+                { "import os", "def add(a, b=1):", "return a + b", NULL } },
+            { "ruby", "require \"json\"\ndef add(a)\nreturn a\nend\n",
+                { "require \"json\"", "def add(a)", "return a", NULL } },
         };
         int roundTrips = sizeof(cases) / sizeof(cases[0]);
         for (int ci = 0; ci < roundTrips; ci++)
