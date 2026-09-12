@@ -38,4 +38,10 @@ public:
 
     /** Function body (BlockNode). */
     ASTNode* m_body;
+
+    /** Endless Ruby def ("def f = body"): prints inline with no end. */
+    bool m_endless;
+
+    /** Explicit empty parens ("def f()"): printed even with no params. */
+    bool m_hasParens;
 };
