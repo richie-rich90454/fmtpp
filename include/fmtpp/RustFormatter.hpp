@@ -4,9 +4,9 @@
 /**
  * Rust code formatter.
  * Extends FormatterVisitor directly with Rust-specific formatting behavior.
- * Handles fn keyword, let bindings, match expressions, impl blocks,
- * trait definitions, macros with !, lifetimes, unsafe blocks, and
- * expression-based returns.
+ * Handles fn with modifiers and -> returns, let/let mut bindings, match
+ * expressions, struct/impl/trait/enum/type/mod declarations, use paths,
+ * vec! and panic! macros, closures and expression-based returns.
  * Output matches rustfmt default style.
  */
 class RustFormatter : public FormatterVisitor
@@ -43,6 +43,8 @@ public:
     virtual void visitPreprocessorDirective(PreprocessorDirectiveNode& node);
     virtual void visitNamespace(NamespaceNode& node);
     virtual void visitProperty(PropertyNode& node);
+    virtual void visitRawText(RawTextNode& node);
+    virtual void visitHtmlElement(HtmlElementNode& node);
 
     // Easter egg: Rust - where the borrow checker is always watching
 };
