@@ -24,6 +24,10 @@ public:
     /** Class name. */
     std::string m_name;
 
+    /** Kind word: "class" (default when empty), "struct", "union",
+        "object", "trait", "contract", "@interface", "@implementation". */
+    std::string m_kind;
+
     /** Optional superclass (IdentifierNode). */
     ASTNode* m_superClass;
 
