@@ -6,7 +6,10 @@
 
 /**
  * Style detector that analyzes source code to infer formatting preferences.
- * Extends ASTVisitor to walk the AST and collect style statistics.
+ * Real detection happens in detectFromSource(), which measures the raw
+ * bytes. The ASTVisitor walk below only takes a node census: AST nodes
+ * carry no style evidence (positions, quote characters, brace placement),
+ * so the AST path assumes nothing and detect() returns defaults.
  * Used by the "fmtpp learn" command to generate a .fmtpp.toml file.
  *
  * Easter egg: the style detective - reading code to understand your formatting soul
@@ -18,9 +21,11 @@ public:
     virtual ~StyleDetector();
 
     /**
-     * Analyzes source code and returns detected style configuration.
+     * Walks an AST and returns the default configuration.
+     * AST nodes carry no style evidence, so nothing is inferred here;
+     * use detectFromSource() for real detection.
      * @param root The root AST node to analyze.
-     * @return Config with detected style preferences.
+     * @return Default Config.
      */
     Config detect(ASTNode* root);
 
@@ -64,6 +69,8 @@ public:
     virtual void visitPreprocessorDirective(PreprocessorDirectiveNode& node);
     virtual void visitNamespace(NamespaceNode& node);
     virtual void visitProperty(PropertyNode& node);
+    virtual void visitRawText(RawTextNode& node);
+    virtual void visitHtmlElement(HtmlElementNode& node);
 
     /**
      * Writes the detected configuration to a .fmtpp.toml file.
