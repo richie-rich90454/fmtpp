@@ -1,5 +1,6 @@
 #pragma once
 #include "fmtpp/ASTNode.hpp"
+#include <string>
 
 class ASTVisitor;
 
@@ -24,6 +25,12 @@ public:
     /** Condition expression. */
     ASTNode* m_condition;
 
+    /** Keyword: "while" (default when empty) or "until". */
+    std::string m_keyword;
+
     /** Loop body (BlockNode). */
     ASTNode* m_body;
+
+    /** Optional else suite (Python while/for else). NULL when absent. */
+    ASTNode* m_elseBlock;
 };
