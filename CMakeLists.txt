@@ -73,6 +73,22 @@ set(FMTPP_SOURCES
   src/TSFormatter.cpp
   src/CppFormatter.cpp
   src/CSharpFormatter.cpp
+  src/KotlinFormatter.cpp
+  src/SwiftFormatter.cpp
+  src/DartFormatter.cpp
+  src/PhpFormatter.cpp
+  src/ScalaFormatter.cpp
+  src/ObjectiveCFormatter.cpp
+  src/ZigFormatter.cpp
+  src/DFormatter.cpp
+  src/GroovyFormatter.cpp
+  src/SolidityFormatter.cpp
+  src/VFormatter.cpp
+  src/GlslFormatter.cpp
+  src/HtmlFormatter.cpp
+  src/CssFormatter.cpp
+  src/VueFormatter.cpp
+  src/FormatterFactory.cpp
   src/StyleDetector.cpp
   src/ThreadPool.cpp
   src/TuiConfigurator.cpp
@@ -132,17 +148,32 @@ set(FMTPP_TESTS
   test_cppformatter
   test_csharpformatter
   test_cstyle_formatter_base_core
+  test_cssformatter
+  test_dartformatter
+  test_dformatter
   test_formatter_visitor
   test_goformatter
+  test_groovyformatter
+  test_glslformatter
+  test_htmlformatter
   test_javaformatter
   test_jsformatter
+  test_kotlinformatter
   test_memorypool_astnode
+  test_objectivecformatter
   test_outputbuffer
   test_parser
+  test_phpformatter
   test_raii_wrappers
   test_rustformatter
+  test_scalaformatter
+  test_solidityformatter
+  test_swiftformatter
   test_threadpool
   test_tsformatter
+  test_vformatter
+  test_vueformatter
+  test_zigformatter
 )
 
 foreach(test_name IN LISTS FMTPP_TESTS)
