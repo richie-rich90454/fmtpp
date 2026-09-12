@@ -55,8 +55,13 @@ void JSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
         printToken(node.m_modifiers.c_str());
         printSpace();
     }
-    printToken("function");
-    if (spaceAfterKeywords()) { printSpace(); }
+    // ponytail: constructors print bare (a "function constructor" keyword
+    // inside a class body would be invalid; top-level matches verbatim)
+    if (!node.m_modifiers.empty() || node.m_name != "constructor")
+    {
+        printToken("function");
+        if (spaceAfterKeywords()) { printSpace(); }
+    }
     printToken(node.m_name.c_str());
     printToken("(");
     size_t pc = node.m_params.size();
@@ -86,10 +91,28 @@ void JSFormatter::visitVariableDeclNode(VariableDeclNode& node)
 
 void JSFormatter::visitClassDeclNode(ClassDeclNode& node)
 {
-    printToken("class");
+    // ponytail: modifiers ride in the kind ("abstract class"); bare and
+    // plain "class" print the keyword, anything else prints verbatim
+    if (!node.m_kind.empty() && node.m_kind != "class")
+    {
+        printToken(node.m_kind.c_str());
+    }
+    else
+    {
+        printToken("class");
+    }
     printSpace();
     printToken(node.m_name.c_str());
     if (node.m_superClass != NULL) { printToken(" extends "); node.m_superClass->accept(*this); }
+    if (!node.m_implements.empty())
+    {
+        printToken(" implements ");
+        for (size_t i = 0; i < node.m_implements.size(); i++)
+        {
+            if (node.m_implements[i] != NULL) { node.m_implements[i]->accept(*this); }
+            if (i + 1 < node.m_implements.size()) { printComma(); }
+        }
+    }
     if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
 }
 
