@@ -538,7 +538,7 @@ int main()
     }
 
     // ============================================================
-    // Test 16: Go namespace -> package comment
+    // Test 16: Go package clause (real, not a comment)
     // ============================================================
     {
         OutputBuffer out(4096);
@@ -556,11 +556,38 @@ int main()
         printf("Test 16 output: [%s]\n", result);
 
         bool ok = true;
-        if (strstr(result, "package") == NULL) { printf("  FAIL: missing 'package'\n"); ok = false; }
-        if (strstr(result, "main") == NULL) { printf("  FAIL: missing 'main'\n"); ok = false; }
+        if (strstr(result, "package main") == NULL) { printf("  FAIL: missing 'package main'\n"); ok = false; }
         if (strstr(result, "namespace") != NULL) { printf("  FAIL: unexpected 'namespace' keyword\n"); ok = false; }
-        if (ok) { printf("Test 16 (Go namespace): PASSED\n"); passed++; }
-        else { printf("Test 16 (Go namespace): FAILED\n"); failed++; }
+        if (strstr(result, "// package") != NULL) { printf("  FAIL: package must not be a comment\n"); ok = false; }
+        if (ok) { printf("Test 16 (Go package): PASSED\n"); passed++; }
+        else { printf("Test 16 (Go package): FAILED\n"); failed++; }
+    }
+
+    // ============================================================
+    // Test 21: Go var without initializer (no := without a value)
+    // ============================================================
+    {
+        OutputBuffer out(4096);
+        Config config;
+        GoFormatter formatter(out, config);
+
+        ProgramNode* prog = ASTNodeFactory::createProgramNode();
+        VariableDeclNode* varDecl = ASTNodeFactory::createVariableDeclNode();
+        varDecl->m_kind = "var";
+        varDecl->m_name = "count";
+        varDecl->m_type = "int";
+        prog->m_statements.push_back(varDecl);
+
+        formatter.format(prog);
+
+        const char* result = out.getData();
+        printf("Test 21 output: [%s]\n", result);
+
+        bool ok = true;
+        if (strstr(result, "var count int") == NULL) { printf("  FAIL: missing 'var count int'\n"); ok = false; }
+        if (strstr(result, ":=") != NULL) { printf("  FAIL: unexpected ':=' without initializer\n"); ok = false; }
+        if (ok) { printf("Test 21 (Go var no init): PASSED\n"); passed++; }
+        else { printf("Test 21 (Go var no init): FAILED\n"); failed++; }
     }
 
     // ============================================================
