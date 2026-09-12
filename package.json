@@ -1,5 +1,5 @@
 {
-  "name": "fmtpp",
+  "name": "formatpp",
   "version": "0.1.0",
   "description": "A professional code formatter for 26 languages, from JS to Zig to Vue to Python to Ruby",
   "main": "index.js",
