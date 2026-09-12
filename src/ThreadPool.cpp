@@ -2,6 +2,7 @@
 #include "fmtpp/SourceBuffer.hpp"
 #include "fmtpp/Parser.hpp"
 #include "fmtpp/Config.hpp"
+#include "fmtpp/ConfigBuilder.hpp"
 #include "fmtpp/OutputBuffer.hpp"
 #include "fmtpp/JSFormatter.hpp"
 #include "fmtpp/TSFormatter.hpp"
@@ -116,7 +117,8 @@ std::string ThreadPool::formatFile(const std::string& filepath, const std::strin
         return std::string();
     }
 
-    Config config;
+    // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
+    Config config = ConfigBuilder::buildForFile(filepath);
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
     FormatterVisitor* formatter = NULL;
 
