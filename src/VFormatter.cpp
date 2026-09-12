@@ -119,4 +119,25 @@ void VFormatter::visitPreprocessorDirectiveNode(PreprocessorDirectiveNode& node)
     printNewline();
 }
 
+void VFormatter::visitLiteralNode(LiteralNode& node)
+{
+    // ponytail: v fmt prefers single quotes; double quotes only when the
+    // value holds an apostrophe (and never corrupts embedded doubles)
+    if (node.m_type == LiteralNode::TYPE_STRING
+        && node.m_value.find('\'') == std::string::npos)
+    {
+        m_out.printf("'%s'", node.m_value.c_str());
+        m_currentColumn += static_cast<int>(node.m_value.size()) + 2;
+        return;
+    }
+    GoFormatter::visitLiteralNode(node);
+}
+
+const char* VFormatter::switchKeyword() const
+{
+    // ponytail: V spells it match; printing switch would emit invalid V
+    // that the next pass cannot even parse back (idempotency repair)
+    return "match";
+}
+
 // Easter egg: VFormatter complete - v fmt . would be proud
