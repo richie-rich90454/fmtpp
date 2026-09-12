@@ -2,6 +2,8 @@
 #include "fmtpp/ast/FunctionDeclNode.hpp"
 #include "fmtpp/ast/ClassDeclNode.hpp"
 #include "fmtpp/ast/ImportDeclNode.hpp"
+#include "fmtpp/ast/IfStmtNode.hpp"
+#include "fmtpp/ast/WhileStmtNode.hpp"
 #include "fmtpp/ast/ForStmtNode.hpp"
 #include "fmtpp/ast/SwitchStmtNode.hpp"
 #include "fmtpp/ast/BlockNode.hpp"
@@ -89,6 +91,32 @@ void SwiftFormatter::visitImportDecl(ImportDeclNode& node)
         printToken(node.m_source.c_str());
     }
     printNewline();
+}
+
+void SwiftFormatter::visitIfStmt(IfStmtNode& node)
+{
+    // ponytail: Swift conditions take no parentheses (swift-format style)
+    printToken("if");
+    printSpace();
+    if (node.m_condition != NULL) { node.m_condition->accept(*this); }
+    if (node.m_thenBranch != NULL) { printSpace(); node.m_thenBranch->accept(*this); }
+    if (node.m_elseBranch != NULL)
+    {
+        printSpace();
+        printToken("else");
+        printSpace();
+        node.m_elseBranch->accept(*this);
+    }
+}
+
+void SwiftFormatter::visitWhileStmt(WhileStmtNode& node)
+{
+    // ponytail: Swift conditions take no parentheses (swift-format style)
+    printToken("while");
+    printSpace();
+    if (node.m_condition != NULL) { node.m_condition->accept(*this); }
+    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    else { printNewline(); }
 }
 
 void SwiftFormatter::visitForStmt(ForStmtNode& node)
