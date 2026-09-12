@@ -42,7 +42,7 @@ ProgramNode::ProgramNode() {}
 ProgramNode::~ProgramNode() {}
 void ProgramNode::accept(ASTVisitor& visitor) { visitor.visitProgram(*this); }
 
-FunctionDeclNode::FunctionDeclNode() : m_body(NULL) {}
+FunctionDeclNode::FunctionDeclNode() : m_body(NULL), m_endless(false), m_hasParens(false) {}
 FunctionDeclNode::~FunctionDeclNode() {}
 void FunctionDeclNode::accept(ASTVisitor& visitor) { visitor.visitFunctionDecl(*this); }
 
