@@ -201,6 +201,15 @@ int main()
         if (ok) { passed++; }
     }
 
+    // Test 7: %-literals are opaque (= and ; inside never split or assign)
+    {
+        const char* src = "puts %w[a=b]\n";
+        std::string out = formatRuby(src);
+        bool ok = out.find("puts %w[a=b]") != std::string::npos;
+        check(ok, "percent literal verbatim", out.c_str());
+        if (ok) { passed++; }
+    }
+
     printf("\n========================================\n");
     printf("RubyFormatter tests: %d passed, %d failed\n", passed, failures);
     printf("========================================\n");
