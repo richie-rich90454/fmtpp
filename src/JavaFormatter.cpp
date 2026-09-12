@@ -2,12 +2,30 @@
 #include "fmtpp/ast/FunctionDeclNode.hpp"
 #include "fmtpp/ast/ClassDeclNode.hpp"
 #include "fmtpp/ast/ImportDeclNode.hpp"
+#include "fmtpp/ast/NamespaceNode.hpp"
 #include "fmtpp/ast/SwitchStmtNode.hpp"
 #include "fmtpp/ast/TryCatchStmtNode.hpp"
 #include "fmtpp/ast/BlockNode.hpp"
 #include <cstdio>
+#include <cstring>
 
 // Easter egg: the Java formatter awakens - ready to handle the verbosity of Java
+
+static bool startsWithWord(const std::string& text, const char* word)
+{
+    size_t n = strlen(word);
+    if (text.size() < n || text.compare(0, n, word) != 0) { return false; }
+    if (text.size() == n) { return true; }
+    char next = text[n];
+    return next != '_' && (next < 'a' || next > 'z') && (next < 'A' || next > 'Z')
+        && (next < '0' || next > '9');
+}
+
+static bool hasVisibility(const std::string& text)
+{
+    return startsWithWord(text, "public") || startsWithWord(text, "private")
+        || startsWithWord(text, "protected");
+}
 
 JavaFormatter::JavaFormatter(OutputBuffer& out, const Config& config)
     : CstyleFormatterBase(out, config)
@@ -20,8 +38,18 @@ JavaFormatter::~JavaFormatter()
 
 void JavaFormatter::visitFunctionDecl(FunctionDeclNode& node)
 {
-    printToken("public");
-    printSpace();
+    // ponytail: public is the default; an explicit visibility in the
+    // modifiers wins instead of doubling up
+    if (!hasVisibility(node.m_modifiers))
+    {
+        printToken("public");
+        printSpace();
+    }
+    if (!node.m_modifiers.empty())
+    {
+        printToken(node.m_modifiers.c_str());
+        printSpace();
+    }
     if (!node.m_returnType.empty())
     {
         printToken(node.m_returnType.c_str());
@@ -42,9 +70,21 @@ void JavaFormatter::visitFunctionDecl(FunctionDeclNode& node)
 
 void JavaFormatter::visitClassDecl(ClassDeclNode& node)
 {
-    printToken("public");
-    printSpace();
-    printToken("class");
+    // ponytail: same visibility rule as methods; kinds like
+    // "abstract class" print after the (optional) public
+    if (!hasVisibility(node.m_kind))
+    {
+        printToken("public");
+        printSpace();
+    }
+    if (node.m_kind.empty() || node.m_kind == "class")
+    {
+        printToken("class");
+    }
+    else
+    {
+        printToken(node.m_kind.c_str());
+    }
     printSpace();
     printToken(node.m_name.c_str());
     if (node.m_superClass != NULL)
@@ -78,6 +118,16 @@ void JavaFormatter::visitImportDecl(ImportDeclNode& node)
     printNewline();
 }
 
+void JavaFormatter::visitNamespace(NamespaceNode& node)
+{
+    printToken("package");
+    printSpace();
+    printToken(node.m_name.c_str());
+    printToken(";");
+    printNewline();
+    if (node.m_body != NULL) { node.m_body->accept(*this); }
+}
+
 void JavaFormatter::visitSwitchStmt(SwitchStmtNode& node)
 {
     printToken("switch");
@@ -86,15 +136,13 @@ void JavaFormatter::visitSwitchStmt(SwitchStmtNode& node)
     printOpeningBrace();
     printNewline();
     indent();
+    // ponytail: cases print verbatim, breaks included. Auto-adding break
+    // would duplicate real breaks and destroy intentional fallthrough.
     size_t cc = node.m_cases.size();
     for (size_t i = 0; i < cc; i++)
     {
         printIndent();
         if (node.m_cases[i] != NULL) { node.m_cases[i]->accept(*this); }
-        printNewline();
-        // Java convention: break after each case
-        printIndent();
-        printToken("break;");
         printNewline();
     }
     dedent();
@@ -107,18 +155,24 @@ void JavaFormatter::visitTryCatchStmt(TryCatchStmtNode& node)
 {
     printToken("try");
     if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
-    if (node.m_catchClause != NULL)
+    if (node.m_catchClause != NULL || node.m_catchBody != NULL)
     {
         printSpace();
         printToken("catch");
+        if (node.m_catchClause != NULL)
+        {
+            printSpace();
+            printToken("(");
+            node.m_catchClause->accept(*this);
+            printToken(")");
+        }
+        if (node.m_catchBody != NULL) { printSpace(); node.m_catchBody->accept(*this); }
+    }
+    for (size_t eci = 0; eci < node.m_extraCatches.size(); eci++)
+    {
+        if (node.m_extraCatches[eci] == NULL) { continue; }
         printSpace();
-        printToken("(");
-        node.m_catchClause->accept(*this);
-        printToken(")");
-        printSpace();
-        // The catch clause body is a BlockNode, visit it
-        // Actually, m_catchClause is the exception type/variable, the body is separate
-        // Let's just visit the catch clause as-is
+        node.m_extraCatches[eci]->accept(*this);
     }
     if (node.m_finallyBlock != NULL)
     {
