@@ -4,8 +4,9 @@
 /**
  * C# code formatter.
  * Extends CstyleFormatterBase with C#-specific formatting:
- * namespace declarations, class/struct/interface with modifiers,
- * properties with get/set, using statements, async/await.
+ * public classes/structs with bases, methods, namespaces and interfaces.
+ * (Properties, events, LINQ and async are not modeled yet and pass
+ * through unstructured.)
  *
  * Easter egg: C# - Microsoft's answer to Java, with extra sharpness
  */
