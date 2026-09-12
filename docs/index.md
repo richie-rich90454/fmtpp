@@ -20,4 +20,12 @@ features:
     details: RAII wrappers for every resource, pool-owned AST nodes, valgrind-clean target.
   - title: Configurable
     details: .fmtpp.toml config, learn-from-example style detection, interactive TUI configurator.
+  - title: Verified output
+    details: Every style example in these docs is the exact binary output — see the style reference.
+    link: /guide/style-reference
+    linkText: Browse examples
+  - title: Tested to hold
+    details: 38 suites, 217 real files, byte-identical double formats — see how testing works.
+    link: /guide/testing
+    linkText: Read the method
 ---
