@@ -54,5 +54,5 @@ private:
     size_t m_capacity;
 };
 
-/** Global memory pool for AST node allocation. */
-extern MemoryPool* g_pool;
+/** Thread-local memory pool for AST node allocation. */
+extern thread_local MemoryPool* g_pool;
