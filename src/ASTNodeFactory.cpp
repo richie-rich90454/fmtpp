@@ -28,6 +28,8 @@
 #include "fmtpp/ast/PreprocessorDirectiveNode.hpp"
 #include "fmtpp/ast/NamespaceNode.hpp"
 #include "fmtpp/ast/PropertyNode.hpp"
+#include "fmtpp/ast/RawTextNode.hpp"
+#include "fmtpp/ast/HtmlElementNode.hpp"
 #include <new>
 
 // Easter egg: the factory floor - where raw memory becomes meaningful AST nodes
@@ -168,4 +170,14 @@ NamespaceNode* ASTNodeFactory::createNamespaceNode()
 PropertyNode* ASTNodeFactory::createPropertyNode()
 {
     return new (g_pool->allocate(sizeof(PropertyNode))) PropertyNode();
+}
+
+RawTextNode* ASTNodeFactory::createRawTextNode()
+{
+    return new (g_pool->allocate(sizeof(RawTextNode))) RawTextNode();
+}
+
+HtmlElementNode* ASTNodeFactory::createHtmlElementNode()
+{
+    return new (g_pool->allocate(sizeof(HtmlElementNode))) HtmlElementNode();
 }
