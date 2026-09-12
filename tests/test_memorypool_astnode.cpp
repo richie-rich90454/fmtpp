@@ -8,7 +8,7 @@
 
 // Easter egg: the memory pool test - where a thousand nodes are born and none are leaked
 
-extern MemoryPool* g_pool;
+extern thread_local MemoryPool* g_pool;
 
 int main()
 {
