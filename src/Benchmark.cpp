@@ -3,14 +3,8 @@
 #include "fmtpp/Parser.hpp"
 #include "fmtpp/OutputBuffer.hpp"
 #include "fmtpp/Config.hpp"
-#include "fmtpp/JSFormatter.hpp"
-#include "fmtpp/TSFormatter.hpp"
-#include "fmtpp/JavaFormatter.hpp"
-#include "fmtpp/CFormatter.hpp"
-#include "fmtpp/CppFormatter.hpp"
-#include "fmtpp/CSharpFormatter.hpp"
-#include "fmtpp/GoFormatter.hpp"
-#include "fmtpp/RustFormatter.hpp"
+#include "fmtpp/FormatterFactory.hpp"
+#include "fmtpp/FormatterVisitor.hpp"
 #include "fmtpp/MemoryPool.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -87,7 +81,7 @@ double Benchmark::formatFile(const std::string& filepath, const std::string& lan
     }
 
     Parser parser;
-    ProgramNode* ast = parser.parse(source);
+    ProgramNode* ast = parser.parse(source, language);
     if (ast == NULL)
     {
         return -1.0;
@@ -95,44 +89,7 @@ double Benchmark::formatFile(const std::string& filepath, const std::string& lan
 
     ::Config fmtConfig;
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
-    FormatterVisitor* formatter = NULL;
-
-    if (language == "js" || language == "javascript")
-    {
-        formatter = new JSFormatter(out, fmtConfig);
-    }
-    else if (language == "ts" || language == "typescript")
-    {
-        formatter = new TSFormatter(out, fmtConfig);
-    }
-    else if (language == "java")
-    {
-        formatter = new JavaFormatter(out, fmtConfig);
-    }
-    else if (language == "c")
-    {
-        formatter = new CFormatter(out, fmtConfig);
-    }
-    else if (language == "cpp" || language == "c++")
-    {
-        formatter = new CppFormatter(out, fmtConfig);
-    }
-    else if (language == "cs" || language == "csharp" || language == "c#")
-    {
-        formatter = new CSharpFormatter(out, fmtConfig);
-    }
-    else if (language == "go")
-    {
-        formatter = new GoFormatter(out, fmtConfig);
-    }
-    else if (language == "rs" || language == "rust")
-    {
-        formatter = new RustFormatter(out, fmtConfig);
-    }
-    else
-    {
-        formatter = new JSFormatter(out, fmtConfig);
-    }
+    FormatterVisitor* formatter = FormatterFactory::create(language, out, fmtConfig);
 
     double elapsed = -1.0;
     if (formatter != NULL)
