@@ -6,13 +6,49 @@
   <title>Demo</title>
 </head>
 <body>
+  <header>
+    <nav><a href="/">home</a></nav>
+  </header>
   <div class="app">
     <p>hello</p>
     <br>
     <span>bye</span>
   </div>
+  <article>
+    <h1>Title</h1>
+    <p>words and { braces } here</p>
+  </article>
+  <section>
+    <h2>Items</h2>
+    <ul>
+      <li>one</li>
+      <li>two</li>
+    </ul>
+    <table>
+      <tr><th>a</th><th>b</th></tr>
+      <tr><td>1</td><td>2</td></tr>
+    </table>
+    <form action="/go">
+      <input type="text" name="q">
+      <button>send</button>
+    </form>
+  </section>
+  <aside>
+    <h3>Notes</h3>
+    <p>side { content } here</p>
+    <ol>
+      <li>first</li>
+      <li>second</li>
+    </ol>
+  </aside>
+  <footer>
+    <p>bye { kept }</p>
+  </footer>
   <script>
     const x = 1;
+    if (x > 0) {
+      show(x);
+    }
   </script>
 </body>
 </html>
