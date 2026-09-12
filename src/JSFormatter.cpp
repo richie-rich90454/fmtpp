@@ -49,6 +49,12 @@ bool JSFormatter::requiresSemicolon(ASTNode* node) const
 
 void JSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
 {
+    // ponytail: export/async ride in m_modifiers so nothing is dropped
+    if (!node.m_modifiers.empty())
+    {
+        printToken(node.m_modifiers.c_str());
+        printSpace();
+    }
     printToken("function");
     if (spaceAfterKeywords()) { printSpace(); }
     printToken(node.m_name.c_str());
@@ -66,8 +72,12 @@ void JSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
 
 void JSFormatter::visitVariableDeclNode(VariableDeclNode& node)
 {
-    printToken(node.m_kind.c_str());
-    printSpace();
+    // ponytail: empty kind (rare hand-built ASTs) prints without a stray space
+    if (!node.m_kind.empty())
+    {
+        printToken(node.m_kind.c_str());
+        printSpace();
+    }
     printToken(node.m_name.c_str());
     if (node.m_initializer != NULL) { printToken(" = "); node.m_initializer->accept(*this); }
     printSemicolonIfNeeded(&node);
