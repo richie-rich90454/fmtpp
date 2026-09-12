@@ -84,7 +84,7 @@ static const char* g_easterEggs[] = {
     "The memory pool: where bytes go to be reused.",
     "No memory leaks, no dangling pointers, no regrets.",
     "This formatter is like a grammar checker for your code.",
-    "We speak 8 languages. Your codebase only needs one formatter.",
+    "We speak 25 languages. Your codebase only needs one formatter.",
     "The stack is our canvas. The heap is our palette.",
     "Formatting code is like making your bed. A small act of discipline.",
     "Your code is now 100% more reviewable.",
@@ -101,7 +101,8 @@ static const char* g_easterEggs[] = {
     "We format code like it's a haiku. Concise. Beautiful. Meaningful.",
     "The memory pool: where allocation is just addition.",
     "No garbage collector needed. We handle our own trash.",
-    "This formatter is the Marie Kondo of code. Does this brace spark joy?"
+    "This formatter is the Marie Kondo of code. Does this brace spark joy?",
+    "The parser used to return placeholders. We fixed that. You're welcome."
 };
 
 static const int g_easterEggCount = sizeof(g_easterEggs) / sizeof(g_easterEggs[0]);
