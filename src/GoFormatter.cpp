@@ -28,6 +28,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 #include <cstdio>
 
 // Easter egg: Go formatter born - simplicity is our middle name
@@ -79,6 +81,8 @@ void GoFormatter::visitNamespace(NamespaceNode& node)       { visitNamespaceNode
 void GoFormatter::visitProperty(PropertyNode& node)         { visitPropertyNode(node); }
 void GoFormatter::visitRawText(RawTextNode& node)             { visitRawTextNode(node); }
 void GoFormatter::visitHtmlElement(HtmlElementNode& node)     { visitHtmlElementNode(node); }
+void GoFormatter::visitWith(WithNode& node)                   { visitWithNode(node); }
+void GoFormatter::visitSwitchCase(SwitchCaseNode& node)       { visitSwitchCaseNode(node); }
 // --- Helpers ---
 
 void GoFormatter::visitNode(ASTNode* node)
@@ -587,6 +591,20 @@ void GoFormatter::visitHtmlElementNode(HtmlElementNode& node)
         if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
         if (i < cc - 1) { printNewline(); }
     }
+}
+
+void GoFormatter::visitWithNode(WithNode& node)
+{
+    if (node.m_context != NULL) { node.m_context->accept(*this); }
+    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    else { printNewline(); }
+}
+
+void GoFormatter::visitSwitchCaseNode(SwitchCaseNode& node)
+{
+    if (node.m_pattern != NULL) { node.m_pattern->accept(*this); }
+    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    else { printNewline(); }
 }
 
 // Easter egg: Go formatter complete - where simplicity meets concurrency, and semicolons are ghosts
