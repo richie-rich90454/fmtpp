@@ -28,6 +28,8 @@ class ExportDeclNode;
 class PreprocessorDirectiveNode;
 class NamespaceNode;
 class PropertyNode;
+class RawTextNode;
+class HtmlElementNode;
 
 /**
  * Static factory for creating AST nodes.
@@ -65,6 +67,8 @@ public:
     static PreprocessorDirectiveNode* createPreprocessorDirectiveNode();
     static NamespaceNode* createNamespaceNode();
     static PropertyNode* createPropertyNode();
+    static RawTextNode* createRawTextNode();
+    static HtmlElementNode* createHtmlElementNode();
 
 private:
     ASTNodeFactory();
