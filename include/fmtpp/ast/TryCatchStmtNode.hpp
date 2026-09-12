@@ -1,5 +1,6 @@
 #pragma once
 #include "fmtpp/ASTNode.hpp"
+#include <vector>
 
 class ASTVisitor;
 
@@ -24,6 +25,13 @@ public:
 
     /** Catch clause. */
     ASTNode* m_catchClause;
+
+    /** Catch body (BlockNode). NULL when absent. */
+    ASTNode* m_catchBody;
+
+    /** Further catch clauses for multi-catch (each a TryCatchStmtNode
+        carrying its own m_catchClause/m_catchBody). */
+    std::vector<ASTNode*> m_extraCatches;
 
     /** Optional finally block. */
     ASTNode* m_finallyBlock;
