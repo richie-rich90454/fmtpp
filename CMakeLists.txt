@@ -88,6 +88,9 @@ set(FMTPP_SOURCES
   src/HtmlFormatter.cpp
   src/CssFormatter.cpp
   src/VueFormatter.cpp
+  src/IndentFormatterBase.cpp
+  src/PythonFormatter.cpp
+  src/RubyFormatter.cpp
   src/FormatterFactory.cpp
   src/StyleDetector.cpp
   src/ThreadPool.cpp
@@ -164,8 +167,10 @@ set(FMTPP_TESTS
   test_outputbuffer
   test_parser
   test_phpformatter
+  test_pythonformatter
   test_raii_wrappers
   test_rustformatter
+  test_rubyformatter
   test_scalaformatter
   test_solidityformatter
   test_swiftformatter
