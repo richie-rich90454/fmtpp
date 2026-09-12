@@ -23,5 +23,15 @@ public:
      */
     static Config buildDefault();
 
+    /**
+     * Builds a Config for a given source file.
+     * Looks for .fmtpp.toml in the file's directory, then each parent
+     * directory; returns defaults when no config file is found.
+     * Missing or broken files also yield defaults.
+     * @param filepath Path of the source file being formatted.
+     * @return Config with merged settings.
+     */
+    static Config buildForFile(const std::string& filepath);
+
     // Easter egg: building configs, one TOML at a time
 };
