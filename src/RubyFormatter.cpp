@@ -35,7 +35,7 @@ void RubyFormatter::visitFunctionDecl(FunctionDeclNode& node)
     printToken("def");
     printSpace();
     printToken(node.m_name.c_str());
-    if (!node.m_params.empty())
+    if (!node.m_params.empty() || node.m_hasParens)
     {
         printToken("(");
         size_t pc = node.m_params.size();
@@ -45,6 +45,17 @@ void RubyFormatter::visitFunctionDecl(FunctionDeclNode& node)
             if (i < pc - 1) { printComma(); }
         }
         printToken(")");
+    }
+    if (node.m_endless && node.m_body != NULL && node.m_body->isBlock())
+    {
+        // ponytail: endless defs print their one statement inline, no end
+        BlockNode* suite = static_cast<BlockNode*>(node.m_body);
+        if (!suite->m_statements.empty() && suite->m_statements[0] != NULL)
+        {
+            printToken(" = ");
+            suite->m_statements[0]->accept(*this);
+            return;
+        }
     }
     printSuite(node.m_body);
     printIndent();
