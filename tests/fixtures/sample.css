@@ -14,3 +14,38 @@ a:hover, .menu > li {
     width: 100%;
   }
 }
+
+/* headings use tight spacing */
+h1, h2 {
+  line-height: 1.2;
+  color: black;
+}
+
+.card {
+  padding: 8px;
+  border: 1px solid gray;
+}
+
+/* braces { } in comments are fine */
+.list > li:first-child {
+  font-weight: bold;
+}
+
+.btn {
+  background: blue;
+  color: white;
+}
+
+@media print {
+  .btn {
+    display: none;
+  }
+  .card {
+    border: none;
+  }
+}
+
+.footer {
+  margin-top: 16px;
+  content: "{ kept }";
+}
