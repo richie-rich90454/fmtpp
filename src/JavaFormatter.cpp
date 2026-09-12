@@ -11,22 +11,6 @@
 
 // Easter egg: the Java formatter awakens - ready to handle the verbosity of Java
 
-static bool startsWithWord(const std::string& text, const char* word)
-{
-    size_t n = strlen(word);
-    if (text.size() < n || text.compare(0, n, word) != 0) { return false; }
-    if (text.size() == n) { return true; }
-    char next = text[n];
-    return next != '_' && (next < 'a' || next > 'z') && (next < 'A' || next > 'Z')
-        && (next < '0' || next > '9');
-}
-
-static bool hasVisibility(const std::string& text)
-{
-    return startsWithWord(text, "public") || startsWithWord(text, "private")
-        || startsWithWord(text, "protected");
-}
-
 JavaFormatter::JavaFormatter(OutputBuffer& out, const Config& config)
     : CstyleFormatterBase(out, config)
 {
@@ -38,9 +22,10 @@ JavaFormatter::~JavaFormatter()
 
 void JavaFormatter::visitFunctionDecl(FunctionDeclNode& node)
 {
-    // ponytail: public is the default; an explicit visibility in the
-    // modifiers wins instead of doubling up
-    if (!hasVisibility(node.m_modifiers))
+    // ponytail: hand-built nodes carry no modifiers, and those default to
+    // public (locked by tests); real modifiers (final, static, explicit
+    // visibility) print verbatim instead of gaining an invented public
+    if (node.m_modifiers.empty())
     {
         printToken("public");
         printSpace();
@@ -70,9 +55,10 @@ void JavaFormatter::visitFunctionDecl(FunctionDeclNode& node)
 
 void JavaFormatter::visitClassDecl(ClassDeclNode& node)
 {
-    // ponytail: same visibility rule as methods; kinds like
-    // "abstract class" print after the (optional) public
-    if (!hasVisibility(node.m_kind))
+    // ponytail: hand-built nodes carry no kind, and those default to
+    // public class (locked by tests); real kinds ("final class",
+    // "public class") print verbatim instead of gaining another public
+    if (node.m_kind.empty() || node.m_kind == "class")
     {
         printToken("public");
         printSpace();
