@@ -178,9 +178,17 @@ int main()
         if (ok) { passed++; }
     }
 
+    // Test 7: bare lambda conditions keep their colon (not the suite's)
+    {
+        const char* src = "if lambda: 1:\n    pass\n";
+        std::string out = formatPython(src);
+        bool ok = out.find("if lambda: 1:") != std::string::npos;
+        check(ok, "bare lambda condition", out.c_str());
+        if (ok) { passed++; }
+    }
+
     printf("\n========================================\n");
-    printf("PythonFormatter tests: %d passed, %d failed\n", passed, failures);
-    printf("========================================\n");
+    printf("PythonFormatter tests: %d passed, %d failed\n", passed, failures);    printf("========================================\n");
 
     if (failures > 0) { return 1; }
     return 0;
