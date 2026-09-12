@@ -1,7 +1,7 @@
 # fmtpp — Format++
 
 A professional-grade, multi-language code formatter written in C++.
-One static binary, eight languages, zero runtime dependencies.
+One static binary, twenty-five languages, zero runtime dependencies.
 
 - [Supported languages](#supported-languages)
 - [Install](#install)
@@ -26,14 +26,30 @@ fall back to JavaScript.
 
 | Language   | Extensions                  | Formatter          | Reference style    |
 |------------|-----------------------------|--------------------|--------------------|
-| JavaScript | `.js` `.mjs` `.cjs`         | `JSFormatter`      | Prettier           |
-| TypeScript | `.ts` `.tsx` `.mts`         | `TSFormatter`      | Prettier           |
+| JavaScript | `.js` `.mjs` `.cjs` `.jsx`  | `JSFormatter`      | Prettier           |
+| TypeScript | `.ts` `.tsx` `.mts` `.cts`  | `TSFormatter`      | Prettier           |
 | Java       | `.java`                     | `JavaFormatter`    | google-java-format |
 | C          | `.c` `.h`                   | `CFormatter`       | clang-format       |
-| C++        | `.cpp` `.cc` `.cxx` `.hpp` `.hh` `.hxx` | `CppFormatter` | clang-format |
+| C++        | `.cpp` `.cc` `.cxx` `.hpp` `.hh` `.hxx` `.ino` `.cu` `.cuh` | `CppFormatter` | clang-format |
 | C#         | `.cs`                       | `CSharpFormatter`  | `dotnet format`    |
 | Go         | `.go`                       | `GoFormatter`      | gofmt              |
 | Rust       | `.rs`                       | `RustFormatter`    | rustfmt            |
+| Kotlin     | `.kt` `.kts`                | `KotlinFormatter`  | ktfmt              |
+| Swift      | `.swift`                    | `SwiftFormatter`   | swift-format       |
+| Dart       | `.dart`                     | `DartFormatter`    | dart format        |
+| PHP        | `.php` `.phtml`             | `PhpFormatter`     | php-cs-fixer       |
+| Scala      | `.scala` `.sc`              | `ScalaFormatter`   | scalafmt           |
+| Objective-C| `.m` `.mm`                  | `ObjectiveCFormatter` | clang-format    |
+| Zig        | `.zig` `.zon`               | `ZigFormatter`     | zig fmt            |
+| D          | `.d` `.di`                  | `DFormatter`       | dfmt               |
+| Groovy     | `.groovy` `.gvy`            | `GroovyFormatter`  | Spotless           |
+| Solidity   | `.sol`                      | `SolidityFormatter`| prettier-plugin-solidity |
+| V          | `.v` `.vsh` `.vv`           | `VFormatter`       | v fmt              |
+| GLSL       | `.glsl` `.vert` `.frag` `.geom` `.comp` `.tesc` `.tese` `.vs` `.fs` | `GlslFormatter` | clang-format |
+| HTML/XML   | `.html` `.htm` `.xhtml` `.svg` `.xml` | `HtmlFormatter` | Prettier     |
+| CSS        | `.css` `.scss` `.less`      | `CssFormatter`     | Prettier           |
+| JSON       | `.json`                     | `JSFormatter`      | Prettier           |
+| Vue SFC    | `.vue`                      | `VueFormatter`     | Prettier/Volar     |
 
 ## Install
 
@@ -187,7 +203,7 @@ file in a multi-file run fails.
 
 ### C++ suites (the real coverage)
 
-18 suites under `ctest`: one formatter suite per language plus infra
+33 suites under `ctest`: one formatter suite per language plus infra
 (pool, buffers, parser, thread pool, config, benchmark).
 
 ```sh
@@ -201,7 +217,7 @@ Useful variants (run from `build/`):
 
 ```sh
 ctest -R javaformatter --output-on-failure   # one suite only
-ctest -R "formatter"                         # all 8 formatter suites
+ctest -R "formatter"                         # all 23 formatter suites
 ./test_goformatter.exe                       # run a suite binary directly
 ```
 
@@ -218,6 +234,21 @@ real-world sample in `tests/fixtures/sample.<ext>`:
 | `test_csharpformatter` | `sample.cs` | `public class : Base, IFace`, methods, `namespace`, interfaces |
 | `test_goformatter` | `sample.go` | `func`, `:=`, no semicolons, structs, `iota`, `panic`, `nil` |
 | `test_rustformatter` | `sample.rs` | `fn ->`, `let [mut]`, `use`, `match`, `panic!`, `vec!`, closures, traits |
+| `test_kotlinformatter` | `sample.kt` | `fun`, classes, `when`, package/import without semicolons |
+| `test_swiftformatter` | `sample.swift` | `func ->`, structs, `for`-in/`switch` without parens |
+| `test_dartformatter` | `sample.dart` | C-style functions, classes, quoted imports |
+| `test_phpformatter` | `sample.php` | `$` sigils, `use`/`namespace`, `<?php` |
+| `test_scalaformatter` | `sample.scala` | `def`, classes/objects, `match`, package/import |
+| `test_objectivecformatter` | `sample.m` | `@interface`/`@protocol`/`@end`, raw methods |
+| `test_zigformatter` | `sample.zig` | `fn`, `struct` containers, `@import`, captures |
+| `test_dformatter` | `sample.d` | `:` bases, dotted imports, `module` |
+| `test_groovyformatter` | `sample.groovy` | `def`, package/import without semicolons |
+| `test_solidityformatter` | `sample.sol` | `contract is`, modifiers/returns, pragmas |
+| `test_vformatter` | `sample.v` | `mut`, real enums, `module`, unquoted imports |
+| `test_glslformatter` | `sample.glsl` | `struct;`, uniforms, `#version` |
+| `test_htmlformatter` | `sample.html` | inline/block elements, voids, comments |
+| `test_cssformatter` | `sample.css` | rules, `prop: value;`, at-rules |
+| `test_vueformatter` | `sample.vue` | template/script/style delegation |
 
 Suites share one pattern: build ASTs with `ASTNodeFactory` on a local
 `MemoryPool`, format into an `OutputBuffer`, assert on the output,
@@ -300,11 +331,17 @@ scripts/         cross-compilation (zig cc) helpers
 ```text
 SourceBuffer → Parser → AST → FormatterVisitor → OutputBuffer → stdout
                              (one per language)     ↑
-ThreadPool fans multi-file runs out; each job owns its buffer+parser.
+ThreadPool fans multi-file runs out; each job owns its buffer and parser.
 ```
 
-- **`MemoryPool`** — one 10 MB bump-allocated chunk; every AST node
-  comes from `ASTNodeFactory` via placement new. No per-node
+- **`Parser`** — a real language-aware parser: comment/string/regex
+  aware scanning, brace matching, per-language profiles. Declarations,
+  control flow, imports and comments become structured AST nodes; leaf
+  expressions stay verbatim and anything unrecognized passes through as
+  `RawTextNode`. Formatting restructures only what it understands, so
+  output is never invented and code cannot be corrupted.
+- **`MemoryPool`** — one 10 MB bump-allocated chunk per thread; every
+  AST node comes from `ASTNodeFactory` via placement new. No per-node
   `new`/`delete`, freed in one shot.
 - **`CstyleFormatterBase`** — the shared master for all C-like
   languages (indent, braces, semicolons, spacing, wrapping, comments).
@@ -337,10 +374,12 @@ ThreadPool fans multi-file runs out; each job owns its buffer+parser.
   detects this at configure time
   (`fmtpp: toolchain cannot link SSE2 intrinsics…`) and falls back to
   the scalar TOML path automatically — no action needed.
-- **Formatted output looks like a placeholder** (`const placeholder =
-  0;`). Expected for now: `Parser` is a fallback stub until tree-sitter
-  grammars are linked (see below). Formatter behavior itself is covered
-  by the unit suites.
+- **Formatted output looks odd for an exotic construct.** By design
+  the parser passes through what it cannot model (method signatures in
+  class bodies, complex attributes, switch arms) verbatim instead of
+  restructuring it. Structure (braces, indentation, semicolons) still
+  applies around it. If output ever drops or rewrites code, that is a
+  bug — file an issue with the input.
 - **`.fmtpp.toml` seems ignored.** It is resolved from the formatted
   file's directory upward, not from your shell's cwd. Put it next to
   (or above) the file you format; check `learn` output parses with no
@@ -348,14 +387,17 @@ ThreadPool fans multi-file runs out; each job owns its buffer+parser.
 
 ## Current status and limitations
 
-Implemented and tested: all eight formatters, config load/merge,
-`learn`, TUI `config`, `bench` (+`--compare`), thread-pool multi-file
-runs, npm packaging with five prebuilt targets.
+Implemented and tested: a real parser for all 25 languages, all
+formatters, config load/merge, `learn`, TUI `config`, `bench`
+(+`--compare`), thread-pool multi-file runs, npm packaging with five
+prebuilt targets.
 
-Pending: linking tree-sitter grammars into `Parser` (it currently
-returns a minimal stub AST, so CLI file output does not yet reflect
-real input). The full phase plan lives in the engineering blueprint
-(`fmtpp.txt`, gitignored) and `docs/guide/architecture.md`.
+Known fidelity limits (valid output, lighter formatting): JS/TS class
+method signatures, complex decorators/attributes and switch-arm bodies
+pass through verbatim; leaf expressions (conditions, arguments,
+initializers) print as written. The full phase plan lives in the
+engineering blueprint (`fmtpp.txt`, gitignored) and
+`docs/guide/architecture.md`.
 
 ## License
 
