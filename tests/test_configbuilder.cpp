@@ -1,9 +1,22 @@
 // Easter egg: config builder tests - because defaults deserve verification too
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include "fmtpp/Config.hpp"
 #include "fmtpp/ConfigBuilder.hpp"
+#include "fmtpp/StyleDetector.hpp"
+
+#ifdef _WIN32
+#include <direct.h>
+#define TEST_MKDIR(p) _mkdir(p)
+#define TEST_RMDIR(p) _rmdir(p)
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#define TEST_MKDIR(p) mkdir(p, 0755)
+#define TEST_RMDIR(p) rmdir(p)
+#endif
 
 static bool writeFile(const char* path, const char* content)
 {
@@ -138,6 +151,86 @@ int main()
             failures++;
         }
         remove(path);
+    }
+
+    // Test 6: buildForFile finds .fmtpp.toml next to the source file
+    {
+        TEST_MKDIR("test_cfg_sub");
+        if (writeFile("test_cfg_sub/.fmtpp.toml", "semi = false\nprintWidth = 100\n"))
+        {
+            Config config = ConfigBuilder::buildForFile("test_cfg_sub/dummy.js");
+            if (config.semi != false) { failures++; printf("FAIL: buildForFile should pick up semi=false from the file's directory\n"); }
+            if (config.printWidth != 100) { failures++; printf("FAIL: buildForFile should pick up printWidth=100 from the file's directory\n"); }
+        }
+        else
+        {
+            printf("FAIL: could not write test_cfg_sub/.fmtpp.toml\n");
+            failures++;
+        }
+        remove("test_cfg_sub/.fmtpp.toml");
+        TEST_RMDIR("test_cfg_sub");
+    }
+
+    // Test 7: buildForFile falls back to defaults when no config exists
+    {
+        Config config = ConfigBuilder::buildForFile("definitely_missing_dir_12345/dummy.js");
+        if (config.semi != true) { failures++; printf("FAIL: buildForFile should default semi to true\n"); }
+        if (config.printWidth != 80) { failures++; printf("FAIL: buildForFile should default printWidth to 80\n"); }
+    }
+
+    // Test 8: detectFromSource reads 4-space indent, semis, single quotes
+    {
+        const char* src =
+            "import { x } from 'mod';\n"
+            "function add(a, b) {\n"
+            "    return a + b;\n"
+            "}\n";
+        StyleDetector detector;
+        Config config = detector.detectFromSource(src, strlen(src));
+        if (config.tabWidth != 4) { failures++; printf("FAIL: tabWidth should be 4, got %d\n", config.tabWidth); }
+        if (config.useTabs != false) { failures++; printf("FAIL: useTabs should be false\n"); }
+        if (config.semi != true) { failures++; printf("FAIL: semi should be true\n"); }
+        if (config.singleQuote != true) { failures++; printf("FAIL: singleQuote should be true\n"); }
+        if (config.braceStyle != "same-line") { failures++; printf("FAIL: braceStyle should be same-line\n"); }
+        if (config.endOfLine != "lf") { failures++; printf("FAIL: endOfLine should be lf\n"); }
+        if (config.printWidth != 80) { failures++; printf("FAIL: printWidth should stay 80, got %d\n", config.printWidth); }
+    }
+
+    // Test 9: detectFromSource reads tabs, missing semis, next-line braces, CRLF
+    {
+        const char* src =
+            "package main\r\n"
+            "func main()\r\n"
+            "{\r\n"
+            "\tprintln(\"hi\")\r\n"
+            "}\r\n";
+        StyleDetector detector;
+        Config config = detector.detectFromSource(src, strlen(src));
+        if (config.useTabs != true) { failures++; printf("FAIL: useTabs should be true\n"); }
+        if (config.semi != false) { failures++; printf("FAIL: semi should be false\n"); }
+        if (config.braceStyle != "next-line") { failures++; printf("FAIL: braceStyle should be next-line\n"); }
+        if (config.endOfLine != "crlf") { failures++; printf("FAIL: endOfLine should be crlf\n"); }
+    }
+
+    // Test 10: detectFromSource raises printWidth for long lines
+    {
+        char src[112];
+        for (int i = 0; i < 100; i++) { src[i] = 'x'; }
+        src[100] = ';';
+        src[101] = '\n';
+        src[102] = '\0';
+        StyleDetector detector;
+        Config config = detector.detectFromSource(src, 102);
+        if (config.printWidth != 101) { failures++; printf("FAIL: printWidth should be 101, got %d\n", config.printWidth); }
+    }
+
+    // Test 11: detectFromSource on empty input keeps defaults
+    {
+        StyleDetector detector;
+        Config config = detector.detectFromSource("", 0);
+        if (config.printWidth != 80) { failures++; printf("FAIL: empty input printWidth should be 80\n"); }
+        if (config.tabWidth != 2) { failures++; printf("FAIL: empty input tabWidth should be 2\n"); }
+        if (config.semi != true) { failures++; printf("FAIL: empty input semi should be true\n"); }
     }
 
     if (failures == 0)
