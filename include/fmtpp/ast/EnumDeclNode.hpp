@@ -24,6 +24,9 @@ public:
     /** Enum name. */
     std::string m_name;
 
+    /** Kind words verbatim ("public enum"); empty means "enum". */
+    std::string m_kind;
+
     /** Enum members. */
     std::vector<ASTNode*> m_members;
 
