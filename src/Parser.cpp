@@ -81,7 +81,7 @@ struct LangProfile
 const LangProfile g_profiles[] = {
     // code      semi regex hash attr colon imports                   classes              ifaces      enums  funcs      syntax    ns       switch   type  comma
     { "js",       1,    1,    0,    1,    0,    "import",                "class",             "interface",  "enum",  "function",  FS_BARE,  NULL,      "switch",  NULL,  0 },
-    { "ts",       1,    1,    0,    1,    0,    "import",                "class",             "interface",  "enum",  "function",  FS_COLON, NULL,      "switch",  NULL,  0 },
+    { "ts",       1,    1,    0,    1,    0,    "import",                "class",             "interface",  "enum",  "function",  FS_COLON, "namespace","switch",  NULL,  0 },
     { "java",     1,    0,    0,    1,    0,    "import",                "class",             "interface",  "enum",  "",          FS_CPREFIX,"package", "switch",  NULL,  0 },
     { "c",        1,    0,    1,    1,    0,    "",                      "",                  "",           "enum",  "",          FS_CPREFIX,NULL,      "switch",  NULL,  0 },
     { "cpp",      1,    0,    1,    1,    0,    "",                      "class struct union","",           "enum",  "",          FS_CPREFIX,"namespace","switch",  NULL,  0 },
@@ -943,6 +943,25 @@ VariableDeclNode* buildVarDecl(const LangProfile* prof, const std::string& text)
             kind = first;
             nameType = trimStr(sp == std::string::npos ? std::string() : nameType.substr(sp + 1));
             if (nameType.empty()) { return NULL; }
+            // ponytail: "let mut x" keeps mut on the kind (Rust); a bare
+            // "mut" stays the name ("let mut = 5" prints back identically).
+            // same for val/var pairs ("const val K", Kotlin): only glued
+            // when more follows, so plain names never get eaten.
+            if (first != "mut" && nameType.size() > 4
+                && nameType.compare(0, 4, "mut ") == 0)
+            {
+                kind += " mut";
+                nameType = trimStr(nameType.substr(4));
+                if (nameType.empty()) { return NULL; }
+            }
+            else if (nameType.size() > 4
+                && (nameType.compare(0, 4, "val ") == 0 || nameType.compare(0, 4, "var ") == 0)
+                && first != nameType.substr(0, 3))
+            {
+                kind += std::string(" ") + nameType.substr(0, 3);
+                nameType = trimStr(nameType.substr(4));
+                if (nameType.empty()) { return NULL; }
+            }
         }
     }
 
@@ -961,13 +980,30 @@ VariableDeclNode* buildVarDecl(const LangProfile* prof, const std::string& text)
     }
     else if (!kind.empty())
     {
-        // declaration word present: name first, type follows (Go/Swift shape)
-        size_t sp2 = nameType.find_first_of(" \t\n");
-        if (sp2 == std::string::npos) { name = nameType; }
+        // declaration word present: Go/Swift spell "name type" (split
+        // first); C-likes spell "type... name" (split last, keeping the
+        // kind: "const char* s" must not become name=const-char*-as-...).
+        // "const x"/"static x" read the same either way.
+        bool nameFirst = (strcmp(prof->code, "go") == 0 || strcmp(prof->code, "swift") == 0);
+        if (nameFirst)
+        {
+            size_t sp2 = nameType.find_first_of(" \t\n");
+            if (sp2 == std::string::npos) { name = nameType; }
+            else
+            {
+                name = trimStr(nameType.substr(0, sp2));
+                type = trimStr(nameType.substr(sp2 + 1));
+            }
+        }
         else
         {
-            name = trimStr(nameType.substr(0, sp2));
-            type = trimStr(nameType.substr(sp2 + 1));
+            std::string k2;
+            splitKindName(nameType, k2, name);
+            if (!k2.empty())
+            {
+                kind += " ";
+                kind += k2;
+            }
         }
     }
     else
@@ -1098,6 +1134,7 @@ void parseOne(Cursor& c, std::vector<ASTNode*>& out, bool& end);
 BlockNode* parseBlock(Cursor& c, bool rawMembers);
 ASTNode* parseStatementText(const LangProfile* prof, const std::string& text);
 void parseHeaderBlock(Cursor& c, std::vector<ASTNode*>& out, const std::string& header, size_t stmtStart);
+void parseSwitchArms(Cursor& c, SwitchStmtNode* node);
 bool consumeBalancedParens(Cursor& c);
 std::string parseCondRest(Cursor& c);
 std::string consumeLogicalLinePreview(Cursor& c);
@@ -1112,7 +1149,8 @@ bool isEndLang(const LangProfile* prof)
     return strcmp(prof->code, "ruby") == 0;
 }
 
-// Strips a trailing # comment (string-aware). Returns the comment after pos.
+// Strips a trailing # comment (string- and %-literal-aware). Returns
+// the comment after pos.
 std::string stripTrailingComment(const std::string& text, std::string& code)
 {
     char quote = 0;
@@ -1126,6 +1164,17 @@ std::string stripTrailingComment(const std::string& text, std::string& code)
             continue;
         }
         if (ch == '"' || ch == '\'') { quote = ch; continue; }
+        if (ch == '%')
+        {
+            // ponytail: %-literals are opaque here too; on plain % (or a
+            // failed open) fall through and advance one like any char
+            size_t j = i;
+            if (skipRubyPercent(text.c_str(), text.size(), j))
+            {
+                i = j - 1;
+                continue;
+            }
+        }
         if (ch == '#')
         {
             code = trimStr(text.substr(0, i));
@@ -1171,6 +1220,27 @@ bool consumeBalancedParens(Cursor& c)
     return paren == 0;
 }
 
+// Skips one balanced {...} group (c.p is AT '{'); strings, comments and
+// nested groups travel opaquely. False at EOF/unbalanced.
+bool skipBalancedBraces(Cursor& c)
+{
+    if (c.p >= c.n || c.d[c.p] != '{') { return false; }
+    int paren = 0, brace = 0, brack = 0;
+    bool first = true;
+    while (c.p < c.n)
+    {
+        size_t before = c.p;
+        stepUnit(c, paren, brace, brack);
+        if (c.p == before) { c.p++; }
+        if (!first && brace <= 0 && paren <= 0 && brack <= 0) { return true; }
+        first = false;
+        if (paren < 0) { paren = 0; }
+        if (brack < 0) { brack = 0; }
+        if (brace < 0) { brace = 0; }
+    }
+    return false;
+}
+
 // Reads a condition: (...) group when present, else raw text to '{'/newline.
 std::string parseCondRest(Cursor& c)
 {
@@ -1201,6 +1271,26 @@ void attachElse(Cursor& c, IfStmtNode* ifNode)
     size_t wstart = c.p;
     while (c.p < c.n && isIdent(c.d[c.p])) { c.p++; }
     std::string w(c.d + wstart, c.p - wstart);
+    // ponytail: single-word elseif (PHP) chains like else-if; the brace
+    // requirement below keeps it from eating identifiers elsewhere
+    if (w == "elseif")
+    {
+        while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n')) { c.p++; }
+        std::string cond = parseCondRest(c);
+        while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n')) { c.p++; }
+        if (c.p < c.n && c.d[c.p] == '{')
+        {
+            IfStmtNode* nested = ASTNodeFactory::createIfStmtNode();
+            nested->m_condition = mkValue(cond);
+            nested->m_thenBranch = parseBlock(c);
+            ifNode->m_elseBranch = nested;
+            // ponytail: chains continue (elseif/else after elseif)
+            attachElse(c, nested);
+            return;
+        }
+        c.p = save;
+        return;
+    }
     if (w != "else")
     {
         c.p = save;
@@ -1220,6 +1310,8 @@ void attachElse(Cursor& c, IfStmtNode* ifNode)
             nested->m_condition = mkValue(cond);
             nested->m_thenBranch = parseBlock(c);
             ifNode->m_elseBranch = nested;
+            // ponytail: chains continue (else after else-if)
+            attachElse(c, nested);
             return;
         }
         c.p = save;
@@ -1356,13 +1448,17 @@ BlockNode* parseBlock(Cursor& c, bool rawMembers)
     return block;
 }
 
-void parseNamespaceLine(Cursor& c, std::vector<ASTNode*>& out, const std::string& word)
+bool parseNamespaceLine(Cursor& c, std::vector<ASTNode*>& out, const std::string& word)
 {
+    size_t save = c.p;
     (void)word;
     c.p += 0;
     // consume the keyword
     while (c.p < c.n && isIdent(c.d[c.p])) { c.p++; }
     skipHSpace(c);
+    // ponytail: a dotted name (namespace.foo()) is a call, not a
+    // declaration; rewind untouched so statement paths keep it verbatim
+    if (c.p < c.n && c.d[c.p] == '.') { c.p = save; return false; }
     size_t start = c.p;
     while (c.p < c.n && c.d[c.p] != '{' && c.d[c.p] != ';' && c.d[c.p] != '\n')
     {
@@ -1375,15 +1471,23 @@ void parseNamespaceLine(Cursor& c, std::vector<ASTNode*>& out, const std::string
     NamespaceNode* node = ASTNodeFactory::createNamespaceNode();
     node->m_name = name;
     skipHSpace(c);
-    if (c.p < c.n && c.d[c.p] == '{')
+    if (c.p < c.n && c.d[c.p] == ';')
     {
-        node->m_body = parseBlock(c);
-    }
-    else if (c.p < c.n && c.d[c.p] == ';')
-    {
+        // ponytail: file-scoped declaration (C# namespace N;) ends here
         c.p++;
     }
+    else
+    {
+        // ponytail: the body brace may open on the next line; newlines
+        // are significant only as the absence of both ; and {
+        while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n')) { c.p++; }
+        if (c.p < c.n && c.d[c.p] == '{')
+        {
+            node->m_body = parseBlock(c);
+        }
+    }
     out.push_back(node);
+    return true;
 }
 
 void parseImportLine(Cursor& c, std::vector<ASTNode*>& out, const std::string& word)
@@ -1716,8 +1820,47 @@ ASTNode* parseStatementText(const LangProfile* prof, const std::string& text)
     // prototype without return type is a call: pass through.
     // indent/end languages never declare C prototypes (their f(x) lines
     // are calls), so skip the prototype guess there entirely.
+    // ponytail: a class/interface/enum/object word before the parens means
+    // a declaration with a primary constructor (kotlin data class), never
+    // a C prototype — those keep verbatim instead of gaining fun/ret.
+    {
+        size_t lp0 = findTopLevel(t, '(');
+        if (lp0 != std::string::npos)
+        {
+            std::string pre0 = trimStr(t.substr(0, lp0));
+            size_t wi0 = 0;
+            bool hitType = false;
+            while (wi0 < pre0.size() && !hitType)
+            {
+                while (wi0 < pre0.size() && (isHSpace(pre0[wi0]) || pre0[wi0] == '\n')) { wi0++; }
+                size_t ws0 = wi0;
+                while (wi0 < pre0.size() && isIdent(pre0[wi0])) { wi0++; }
+                if (ws0 < wi0)
+                {
+                    std::string word0 = pre0.substr(ws0, wi0 - ws0);
+                    if (hasWord(prof->classWords, word0) || hasWord(prof->ifaceWords, word0)
+                        || hasWord(prof->enumWords, word0)) { hitType = true; }
+                }
+                if (ws0 == wi0) { wi0++; }
+            }
+            if (hitType) { return mkRawSemi(t, hadSemi); }
+        }
+    }
+    // ponytail: Solidity event/error declarations are not functions
+    // ("function Sent(...) event" would be invalid); keep them verbatim.
+    // Assignments and bare calls never reach here shaped this way.
+    {
+        std::string w0 = firstWord(t);
+        if ((w0 == "event" || w0 == "error") && strcmp(prof->code, "solidity") == 0)
+        {
+            return mkRawSemi(t, hadSemi);
+        }
+    }
     FunctionDeclNode* proto = NULL;
-    if (strcmp(prof->code, "python") != 0 && strcmp(prof->code, "ruby") != 0)
+    // ponytail: js/ts have no prototype syntax at all (`await g()` is a
+    // unary expression, not a declaration), same as python/ruby above.
+    if (strcmp(prof->code, "python") != 0 && strcmp(prof->code, "ruby") != 0
+        && strcmp(prof->code, "js") != 0 && strcmp(prof->code, "ts") != 0)
     {
         proto = tryCFunction(t, true);
     }
@@ -2039,9 +2182,15 @@ void parseHeaderBlock(Cursor& c, std::vector<ASTNode*>& out, const std::string& 
         FunctionDeclNode* fn = tryCFunction(H, false);
         if (fn != NULL)
         {
-            fn->m_body = parseBlock(c);
-            out.push_back(fn);
-            return;
+            // ponytail: a "return type" of get/set means an accessor
+            // (get v()/set v(x)), not a C prototype — fall through to the
+            // verbatim escape hatch instead of gaining a function keyword
+            if (fn->m_returnType != "get" && fn->m_returnType != "set")
+            {
+                fn->m_body = parseBlock(c);
+                out.push_back(fn);
+                return;
+            }
         }
     }
     // ObjC methods keep the whole header as their signature
@@ -2062,7 +2211,9 @@ void parseHeaderBlock(Cursor& c, std::vector<ASTNode*>& out, const std::string& 
         out.push_back(node);
         return;
     }
-    // bare name(){}: declaration in most languages, verbatim method elsewhere
+    // bare name(){}: declaration in most languages, verbatim method elsewhere.
+    // "constructor" is always a declaration (a bare constructor() call with
+    // a braced block would print back identically anyway).
     {
         size_t lp = findTopLevel(H, '(');
         if (lp != std::string::npos)
@@ -2097,7 +2248,7 @@ void parseHeaderBlock(Cursor& c, std::vector<ASTNode*>& out, const std::string& 
             }
             if (singleIdent && rp != std::string::npos && trimStr(H.substr(rp + 1)).empty())
             {
-                if (bareFuncIsDecl(c.prof))
+                if (bareFuncIsDecl(c.prof) || pre == "constructor")
                 {
                     FunctionDeclNode* node = ASTNodeFactory::createFunctionDeclNode();
                     node->m_name = pre;
@@ -2109,6 +2260,55 @@ void parseHeaderBlock(Cursor& c, std::vector<ASTNode*>& out, const std::string& 
                 }
             }
             (void)post;
+        }
+    }
+    // trailing match (Scala "expr match {"): discriminant leads, the
+    // keyword closes the header. Only for match-word languages; anything
+    // else keeps the verbatim escape hatch below.
+    if (c.prof->switchWord != NULL && strcmp(c.prof->switchWord, "match") == 0
+        && c.p < c.n && c.d[c.p] == '{')
+    {
+        size_t mp = std::string::npos;
+        {
+            int paren = 0, brack = 0, brace = 0;
+            char quote = 0;
+            for (size_t i = 0; i + 5 <= H.size(); i++)
+            {
+                char ch = H[i];
+                if (quote)
+                {
+                    if (ch == '\\') { i++; }
+                    else if (ch == quote) { quote = 0; }
+                    continue;
+                }
+                if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; continue; }
+                if (ch == '(') { paren++; }
+                else if (ch == ')') { if (paren > 0) paren--; }
+                else if (ch == '[') { brack++; }
+                else if (ch == ']') { if (brack > 0) brack--; }
+                else if (ch == '{') { brace++; }
+                else if (ch == '}') { if (brace > 0) brace--; }
+                else if (paren == 0 && brack == 0 && brace == 0
+                    && H.compare(i, 5, "match") == 0
+                    && (i == 0 || (!isIdent(H[i - 1]) && H[i - 1] != '.'))
+                    && (i + 5 >= H.size() || !isIdent(H[i + 5])))
+                {
+                    mp = i;
+                }
+            }
+        }
+        if (mp != std::string::npos)
+        {
+            std::string disc = trimStr(H.substr(0, mp));
+            std::string tail = trimStr(H.substr(mp + 5));
+            if (!disc.empty() && tail.empty())
+            {
+                SwitchStmtNode* node = ASTNodeFactory::createSwitchStmtNode();
+                node->m_discriminant = mkValue(disc);
+                parseSwitchArms(c, node);
+                out.push_back(node);
+                return;
+            }
         }
     }
     // escape hatch: verbatim header, structured body — never corrupt
@@ -2170,13 +2370,50 @@ void parseFunctionHead(Cursor& c, std::vector<ASTNode*>& out, const std::string&
     }
     std::string name;
     {
+        // ponytail: the name is everything from the keyword to the params:
+        // plain names, generics (Scala f[A], Kotlin <T> f) and JS *gen()
+        // all ride verbatim instead of losing pieces to a char allowlist
         size_t np = kwEnd;
         while (np < header.size() && (isHSpace(header[np]) || header[np] == '\n')) { np++; }
-        size_t ns = np;
-        while (np < header.size() && np < lp
-            && (isIdent(header[np]) || header[np] == '<' || header[np] == '>'
-                || header[np] == ',' || header[np] == '?' || header[np] == '.')) { np++; }
-        name = trimStr(header.substr(ns, np - ns));
+        size_t ne = (lp == std::string::npos) ? header.size() : lp;
+        name = trimStr(header.substr(np, ne > np ? ne - np : 0));
+        if (!name.empty() && name.find_first_of("(){};") == std::string::npos)
+        {
+            // ponytail: plain slice taken (generics like f[A, B] ride whole)
+        }
+        else if (!name.empty())
+        {
+            // ponytail: stray punctuation in the slice means hands off
+            name.clear();
+        }
+        else
+        {
+            // ponytail: Go receivers ("func (s S) M("): the first group is
+            // the receiver, the real name+params follow it. Anything else
+            // shaped this way stays raw (anonymous JS functions et al).
+            // Both pieces are validated by construction (balanced group +
+            // identifier), so no re-check is needed here.
+            std::string afterRecv = trimStr(header.substr(sub.p));
+            size_t rp2 = 0;
+            while (rp2 < afterRecv.size() && isIdent(afterRecv[rp2])) { rp2++; }
+            size_t qp = rp2;
+            while (qp < afterRecv.size()
+                && (isHSpace(afterRecv[qp]) || afterRecv[qp] == '\n')) { qp++; }
+            if (rp2 > 0 && qp < afterRecv.size() && afterRecv[qp] == '(')
+            {
+                Cursor sub2 = c;
+                sub2.d = afterRecv.c_str();
+                sub2.n = afterRecv.size();
+                sub2.p = qp;
+                std::string params2;
+                if (readParenGroup(sub2, params2))
+                {
+                    name = "(" + params + ") " + afterRecv.substr(0, rp2);
+                    params = params2;
+                    trailer = trimStr(afterRecv.substr(sub2.p));
+                }
+            }
+        }
     }
     bool bad = false;
     if (prof->funcSyntax == FS_BARE)
@@ -2471,6 +2708,7 @@ void parseTypeHead(Cursor& c, std::vector<ASTNode*>& out, const std::string& hea
         std::string inner(c.d + start, (c.p > start + 1 ? c.p - start - 1 : 0));
         EnumDeclNode* enm = ASTNodeFactory::createEnumDeclNode();
         enm->m_name = name;
+        enm->m_kind = kind;
         std::vector<std::string> members;
         splitTopLevel(inner, ',', members);
         if (members.size() == 1 && members[0].find('\n') != std::string::npos)
@@ -2520,6 +2758,7 @@ void parseTypeHead(Cursor& c, std::vector<ASTNode*>& out, const std::string& hea
     {
         InterfaceDeclNode* node = ASTNodeFactory::createInterfaceDeclNode();
         node->m_name = name;
+        node->m_kind = kind;
         if (superCls != NULL) { node->m_extends.push_back(superCls); }
         for (size_t i = 0; i < impls.size(); i++) { node->m_extends.push_back(impls[i]); }
         if (c.p < c.n && c.d[c.p] == '{')
@@ -2602,11 +2841,13 @@ void parseForRest(Cursor& c, std::vector<ASTNode*>& out, const std::string& keyw
     skipHSpace(c);
     std::string inner;
     bool haveParens = (c.p < c.n && c.d[c.p] == '(');
+    // ponytail: Zig captures ride after the group (for (xs) |x|); kept
+    // separate so the parens survive verbatim below
+    std::string forCapture;
     if (haveParens)
     {
         if (!readParenGroup(c, inner)) { inner.clear(); }
         inner = trimStr(inner);
-        // ponytail: Zig captures ride after the group: for (xs) |x| {
         size_t q = c.p;
         while (q < c.n && (isHSpace(c.d[q]) || c.d[q] == '\n')) { q++; }
         if (q < c.n && c.d[q] == '|')
@@ -2615,7 +2856,7 @@ void parseForRest(Cursor& c, std::vector<ASTNode*>& out, const std::string& keyw
             while (e < c.n && c.d[e] != '|' && c.d[e] != '\n') { e++; }
             if (e < c.n && c.d[e] == '|')
             {
-                inner += " " + trimStr(std::string(c.d + q, e - q + 1));
+                forCapture = trimStr(std::string(c.d + q, e - q + 1));
                 c.p = e + 1;
             }
         }
@@ -2646,9 +2887,18 @@ void parseForRest(Cursor& c, std::vector<ASTNode*>& out, const std::string& keyw
         else
         {
             // ponytail: for-in/foreach/range headers stay whole so no
-            // keyword, variable or separator is ever dropped or invented
+            // keyword, variable or separator is ever dropped or invented;
+            // a capture keeps its parens (Zig requires them around the
+            // payload, and dropping them corrupts the header)
             node->m_classic = false;
-            node->m_condition = mkValue(inner);
+            if (haveParens && !forCapture.empty())
+            {
+                node->m_condition = mkValue("(" + inner + ") " + forCapture);
+            }
+            else
+            {
+                node->m_condition = mkValue(inner);
+            }
         }
     }
     while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n')) { c.p++; }
@@ -2760,13 +3010,21 @@ void parseSwitchRest(Cursor& c, std::vector<ASTNode*>& out, const std::string& k
     std::string disc = parseCondRest(c);
     while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n')) { c.p++; }
     SwitchStmtNode* node = ASTNodeFactory::createSwitchStmtNode();
+    node->m_keyword = keyword;
     if (!disc.empty()) { node->m_discriminant = mkValue(disc); }
     if (c.p >= c.n || c.d[c.p] != '{')
     {
         out.push_back(mkRaw(disc.empty() ? keyword : keyword + " " + disc));
         return;
     }
-    c.p++;
+    parseSwitchArms(c, node);
+    out.push_back(node);
+}
+
+// Consumes a brace-delimited arm list into node (c.p is AT '{').
+void parseSwitchArms(Cursor& c, SwitchStmtNode* node)
+{
+    if (c.p < c.n && c.d[c.p] == '{') { c.p++; }
     bool armPerChunk = (strcmp(c.prof->code, "v") == 0);
     std::string cur;
     bool haveArm = false;
@@ -2823,7 +3081,6 @@ void parseSwitchRest(Cursor& c, std::vector<ASTNode*>& out, const std::string& k
     {
         pushSwitchArm(c.prof, node, cur);
     }
-    out.push_back(node);
 }
 
 void parseCatchInto(Cursor& c, TryCatchStmtNode* node, bool first, bool isFinally)
@@ -3464,14 +3721,22 @@ void parseOne(Cursor& c, std::vector<ASTNode*>& out, bool& end)
     }
     if (c.prof->namespaceWord != NULL && w == c.prof->namespaceWord)
     {
-        parseNamespaceLine(c, out, w);
-        return;
+        // ponytail: dotted calls rewind and fall through to statements
+        if (parseNamespaceLine(c, out, w)) { return; }
     }
     if (w == "if") { c.p += 2; parseIfRest(c, out); return; }
     if (w == "for" || w == "foreach") { c.p += w.size(); parseForRest(c, out, w); return; }
     if (w == "while") { c.p += 5; parseWhileRest(c, out); return; }
     if (w == "do") { c.p += 2; parseDoRest(c, out); return; }
     if (c.prof->switchWord != NULL && !w.empty() && w == c.prof->switchWord)
+    {
+        c.p += w.size();
+        parseSwitchRest(c, out, w);
+        return;
+    }
+    // ponytail: Go select shares the switch machinery (case/default arms);
+    // anything else named select falls through to statements below
+    if (strcmp(c.prof->code, "go") == 0 && w == "select")
     {
         c.p += w.size();
         parseSwitchRest(c, out, w);
@@ -3518,13 +3783,34 @@ void parseOne(Cursor& c, std::vector<ASTNode*>& out, bool& end)
     }
     // generic statement-or-block scan
     size_t stmtStart = c.p;
-    size_t termPos = 0;
-    char term = scanTerminator(c, termPos);
-    if (term == '{')
+    for (;;)
     {
-        parseHeaderBlock(c, out, std::string(c.d + stmtStart, termPos - stmtStart), stmtStart);
-        return;
-    }
+        size_t termPos = 0;
+        char term = scanTerminator(c, termPos);
+        if (term == '{')
+        {
+            std::string H = trimStr(std::string(c.d + stmtStart, termPos - stmtStart));
+            // ponytail: "= {" and "return {" open an expression (object
+            // literal, composite value), not a block; a lone const/let/var
+            // opens a destructuring pattern. Skip the group opaque and keep
+            // scanning for the statement end instead of splitting there.
+            // (findAssign is depth-aware, so for/if headers never qualify;
+            // same-line only, so ASI return-newline keeps working.)
+            bool exprBrace = (findAssign(H) != std::string::npos)
+                || startsWithWord(H, "return");
+            if (!exprBrace && (H == "const" || H == "let" || H == "var"))
+            {
+                exprBrace = true;
+            }
+            if (exprBrace)
+            {
+                c.p = termPos;
+                if (skipBalancedBraces(c)) { continue; }
+                c.p = termPos;
+            }
+            parseHeaderBlock(c, out, std::string(c.d + stmtStart, termPos - stmtStart), stmtStart);
+            return;
+        }
     if (term == ';')
     {
         std::string text(c.d + stmtStart, termPos - stmtStart + 1);
@@ -3547,7 +3833,7 @@ void parseOne(Cursor& c, std::vector<ASTNode*>& out, bool& end)
         pushStatement(c, out, text);
         return;
     }
-    // EOF: tolerate a missing terminator
+    // EOF: tolerate a missing terminator (returns: nothing follows EOF)
     std::string text(c.d + stmtStart, termPos - stmtStart);
     c.p = termPos;
     if (trimStr(text).empty())
@@ -3557,6 +3843,8 @@ void parseOne(Cursor& c, std::vector<ASTNode*>& out, bool& end)
     }
     pushStatement(c, out, text);
     end = true;
+    return;
+    }
 }
 
 // --- Indentation engine (Python) ---
@@ -3829,8 +4117,11 @@ bool readPythonLogical(Cursor& c, std::string& text, int& indent, bool& isCommen
             else if (ch == '\\' && c.p + 1 < c.n
                 && (c.d[c.p + 1] == '\n' || c.d[c.p + 1] == '\r'))
             {
+                // ponytail: the backslash stays in the text (dropping it
+                // would corrupt the statement); the join newline follows
                 lineCont = true;
-                break;
+                c.p++;
+                continue;
             }
             c.p++;
         }
@@ -3890,8 +4181,9 @@ void parsePythonItems(Cursor& c, std::vector<ASTNode*>& out, int baseIndent,
             c.p = save;
             break;
         }
-        for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
-        pending.clear();
+        // ponytail: no flush here; continuations inside parsePythonLineText
+        // attach buffered comments to the suites they close, and only fresh
+        // lines flush them as siblings (see below)
         parsePythonLineText(c, out, text, indent, pending, &heldIf, &heldTry,
             &heldFor, &heldWhile);
     }
@@ -4258,11 +4550,15 @@ void parsePythonLineText(Cursor& c, std::vector<ASTNode*>& out, const std::strin
         }
     }
     // ponytail: holders only track open chains for continuations; every
-    // held node is already pushed, so a fresh line just closes the chains
+    // held node is already pushed, so a fresh line just closes the chains.
+    // Buffered comments flush here (not earlier), so continuations above
+    // could still claim them for the suites they close.
     if (heldIf != NULL) { *heldIf = NULL; }
     if (heldTry != NULL) { *heldTry = NULL; }
     if (heldFor != NULL) { *heldFor = NULL; }
     if (heldWhile != NULL) { *heldWhile = NULL; }
+    for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
+    pending.clear();
     for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
     pending.clear();
     // 4. fresh line dispatch below; async only prefixes def/for/with,
@@ -4989,6 +5285,43 @@ void splitRubyLine(const std::string& text, const LangProfile* prof,
     if (!tail.empty()) { out.push_back(tail); }
 }
 
+// True when a physical line ends inside a Ruby string (join the next
+// line, or re-indentation would rewrite the string value). Single-state
+// naive scan: only open/closed parity matters, so #{...} needs no
+// structure (its quotes still toggle parity correctly). Regexes,
+// %-literals and comments travel opaquely or end the scan.
+bool rubyStringOpen(const std::string& line, const LangProfile* prof)
+{
+    Cursor s;
+    s.d = line.c_str();
+    s.n = line.size();
+    s.p = 0;
+    s.prof = prof;
+    int dummy1 = 0, dummy2 = 0, dummy3 = 0;
+    char quote = 0;
+    while (s.p < s.n)
+    {
+        char ch = s.d[s.p];
+        if (quote)
+        {
+            if (ch == '\\' && s.p + 1 < s.n) { s.p += 2; continue; }
+            if (ch == quote) { quote = 0; }
+            s.p++;
+            continue;
+        }
+        if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; s.p++; continue; }
+        if (ch == '#') { return false; }
+        if (ch == '/') { stepUnit(s, dummy1, dummy2, dummy3); continue; }
+        if (ch == '%')
+        {
+            size_t j = s.p;
+            if (skipRubyPercent(s.d, s.n, j)) { s.p = j; continue; }
+        }
+        s.p++;
+    }
+    return quote != 0;
+}
+
 // Reads one logical Ruby line into segments: joins backslash, bracket and
 // operator continuations, slurps heredoc bodies verbatim, keeps =begin
 // blocks and __END__ tails whole. False at EOF (nothing appended).
@@ -5087,7 +5420,8 @@ bool readRubyLine(Cursor& c, std::vector<std::string>& segs)
                 if (trimStr(body) == marks[mi]) { break; }
             }
         }
-        if (c.p < c.n && rubyJoins(line, c.prof, paren, brack, brace)) { continue; }
+        if (c.p < c.n && (rubyJoins(line, c.prof, paren, brack, brace)
+            || rubyStringOpen(line, c.prof))) { continue; }
         break;
     }
     if (heredoc) { segs.push_back(trimStr(acc)); }
@@ -5301,8 +5635,9 @@ int parseRubyItems(Cursor& c, std::vector<ASTNode*>& out,
             pending.push_back(cm);
             continue;
         }
-        for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
-        pending.clear();
+        // ponytail: no flush here; continuations inside parseRubySegment
+        // attach buffered comments to the suites they close, and only fresh
+        // lines (or a closing end) flush them as siblings (see below)
         // ponytail: continuations belong to the level holding the opener; a
         // body rewinds a holder-less one so it bubbles to the holder (maybe
         // levels up); only a holder-less top level keeps one verbatim
@@ -5332,6 +5667,19 @@ int parseRubyItems(Cursor& c, std::vector<ASTNode*>& out,
     }
 }
 
+// Splits a trailing # comment off an opener header into pending
+// (string- and %-aware). Callers parse the stripped code, keep raw
+// fallbacks on the original line, and queue only on success (the suite
+// loop-top then opens with the comment).
+void queueHeaderComment(const std::string& hc, std::vector<ASTNode*>& pending)
+{
+    if (hc.empty()) { return; }
+    CommentNode* cm = ASTNodeFactory::createCommentNode();
+    cm->m_text = hc.size() > 1 ? trimStr(hc.substr(1)) : std::string();
+    cm->m_isBlock = false;
+    pending.push_back(cm);
+}
+
 // Parses one Ruby segment. Openers push their node, then consume the body
 // through recursion; continuations mutate the pushed holder in place, so
 // nothing is ever pushed twice. RB_END closes the level, RB_EOF unwinds all.
@@ -5340,9 +5688,12 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
     RubyHolders* held, bool topLevel)
 {
     std::string w = firstWord(t);
-    // end closes the level (a stray top-level end stays verbatim)
+    // end closes the level (a stray top-level end stays verbatim).
+    // Buffered comments flush first: they sit inside the closing suite.
     if (w == "end")
     {
+        for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
+        pending.clear();
         std::string rest = trimStr(t.substr(3));
         if (rest.empty())
         {
@@ -5393,59 +5744,67 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
     // else binds to the innermost open holder (if, case, or begin)
     if (w == "else" && held != NULL && held->kind != 0)
     {
+        std::string code;
+        std::string hc = stripTrailingComment(t, code);
         std::string head;
         std::string rest;
-        splitRubyThen(t, head, rest);
+        splitRubyThen(code, head, rest);
         // ponytail: "else stmt" carries its suite inline with no then;
         // a trailing comment alone keeps the whole line verbatim
         if (trimStr(head) != "else")
         {
-            std::string after = (t.size() > 4) ? trimStr(t.substr(4)) : std::string();
+            std::string after = (code.size() > 4) ? trimStr(code.substr(4)) : std::string();
             if (after.empty() || after[0] == '#')
             {
                 out.push_back(mkRaw(t));
                 return RB_CONT;
             }
             head = "else";
-            rest = after;
+            // ponytail: the stripped comment rides back onto the suite
+            // rest, which keeps it verbatim as one statement
+            rest = hc.empty() ? after : after + " " + hc;
+            hc.clear();
         }
-            if (held->kind == 1 && held->iff != NULL
-                && held->iff->m_elseBranch == NULL)
-            {
-                BlockNode* suite = ASTNodeFactory::createBlockNode();
-                if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
-                int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
-                held->iff->m_elseBranch = suite;
-                held->iff = NULL;
-                held->kind = 0;
-                if (st == RB_EOF) { return RB_EOF; }
-                return RB_CONT;
-            }
-            if (held->kind == 2 && held->sw != NULL)
-            {
-                SwitchCaseNode* arm = ASTNodeFactory::createSwitchCaseNode();
-                arm->m_pattern = mkRaw("else");
-                BlockNode* suite = ASTNodeFactory::createBlockNode();
-                if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
-                int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
-                arm->m_body = suite;
-                held->sw->m_cases.push_back(arm);
-                if (st == RB_EOF) { return RB_EOF; }
-                if (st == RB_END) { held->sw = NULL; held->kind = 0; }
-                return RB_CONT;
-            }
-            if (held->kind == 3 && held->tcb != NULL
-                && held->tcb->m_elseBlock == NULL
-                && held->tcb->m_finallyBlock == NULL)
-            {
-                BlockNode* suite = ASTNodeFactory::createBlockNode();
-                if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
-                int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
-                held->tcb->m_elseBlock = suite;
-                if (st == RB_EOF) { return RB_EOF; }
-                if (st == RB_END) { held->tcb = NULL; held->kind = 0; }
-                return RB_CONT;
-            }
+        if (held->kind == 1 && held->iff != NULL
+            && held->iff->m_elseBranch == NULL)
+        {
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+            queueHeaderComment(hc, pending);
+            int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+            held->iff->m_elseBranch = suite;
+            held->iff = NULL;
+            held->kind = 0;
+            if (st == RB_EOF) { return RB_EOF; }
+            return RB_CONT;
+        }
+        if (held->kind == 2 && held->sw != NULL)
+        {
+            SwitchCaseNode* arm = ASTNodeFactory::createSwitchCaseNode();
+            arm->m_pattern = mkRaw("else");
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+            queueHeaderComment(hc, pending);
+            int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+            arm->m_body = suite;
+            held->sw->m_cases.push_back(arm);
+            if (st == RB_EOF) { return RB_EOF; }
+            if (st == RB_END) { held->sw = NULL; held->kind = 0; }
+            return RB_CONT;
+        }
+        if (held->kind == 3 && held->tcb != NULL
+            && held->tcb->m_elseBlock == NULL
+            && held->tcb->m_finallyBlock == NULL)
+        {
+            BlockNode* suite = ASTNodeFactory::createBlockNode();
+            if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+            queueHeaderComment(hc, pending);
+            int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
+            held->tcb->m_elseBlock = suite;
+            if (st == RB_EOF) { return RB_EOF; }
+            if (st == RB_END) { held->tcb = NULL; held->kind = 0; }
+            return RB_CONT;
+        }
         // ponytail: doubled or misplaced else cannot attach; the holder is
         // already pushed, so keep just the line verbatim
         out.push_back(mkRaw(t));
@@ -5580,9 +5939,11 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         {
             db = static_cast<BlockNode*>(fn->m_body);
         }
+        std::string code;
+        std::string hc = stripTrailingComment(t, code);
         std::string head;
         std::string rest;
-        splitRubyThen(t, head, rest);
+        splitRubyThen(code, head, rest);
         if (db == NULL || trimStr(head) != "ensure")
         {
             out.push_back(mkRaw(t));
@@ -5593,6 +5954,7 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         TryCatchStmtNode* chain = ASTNodeFactory::createTryCatchStmtNode();
         BlockNode* suite = ASTNodeFactory::createBlockNode();
         if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        queueHeaderComment(hc, pending);
         int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
         chain->m_finallyBlock = suite;
         db->m_statements.push_back(chain);
@@ -5607,9 +5969,11 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
     if (w == "ensure" && held != NULL && held->tcb != NULL
         && held->tcb->m_finallyBlock == NULL)
     {
+        std::string code;
+        std::string hc = stripTrailingComment(t, code);
         std::string head;
         std::string rest;
-        splitRubyThen(t, head, rest);
+        splitRubyThen(code, head, rest);
         if (trimStr(head) != "ensure")
         {
             out.push_back(mkRaw(t));
@@ -5617,6 +5981,7 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         }
         BlockNode* suite = ASTNodeFactory::createBlockNode();
         if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        queueHeaderComment(hc, pending);
         int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
         held->tcb->m_finallyBlock = suite;
         held->tcb = NULL;
@@ -5624,7 +5989,9 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         if (st == RB_EOF) { return RB_EOF; }
         return RB_CONT;
     }
-    // a fresh line closes open chains (every held node is already pushed)
+    // a fresh line closes open chains (every held node is already pushed).
+    // Buffered comments flush here (not earlier), so continuations above
+    // could still claim them for the suites they close.
     if (held != NULL)
     {
         held->iff = NULL;
@@ -5633,9 +6000,13 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         held->def = NULL;
         held->kind = 0;
     }
+    for (size_t i = 0; i < pending.size(); i++) { out.push_back(pending[i]); }
+    pending.clear();
     if (w == "def")
     {
-        std::string rest = trimStr(t.substr(3));
+        std::string code;
+        std::string hc = stripTrailingComment(t, code);
+        std::string rest = trimStr(code.substr(3));
         size_t lp = findTopLevel(rest, '(');
         std::string name;
         std::string params;
@@ -5686,6 +6057,7 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         FunctionDeclNode* node = ASTNodeFactory::createFunctionDeclNode();
         node->m_name = name;
         if (!trimStr(params).empty()) { node->m_params.push_back(mkIdent(trimStr(params))); }
+        else if (lp != std::string::npos) { node->m_hasParens = true; }
         // ponytail: "def f = body" is endless: one statement, no end coming
         bool endless = !trailer.empty() && trailer[0] == '='
             && (trailer.size() < 2 || (trailer[1] != '=' && trailer[1] != '>'));
@@ -5706,23 +6078,33 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
             node->m_body = suite;
             // ponytail: dispatch the lone statement directly (no level
             // loop, so no read-ahead); anything reaching past its own
-            // line rewinds and the opener stays verbatim instead
+            // line rewinds and the opener stays verbatim instead.
+            // op starts past parts[0] (already taken, dispatched below).
             size_t pMark = c.p;
-            size_t op = 0;
+            size_t op = 1;
             RubyHolders bh;
             bh.iff = NULL;
             bh.tcb = NULL;
             bh.sw = NULL;
             bh.def = NULL;
             bh.kind = 0;
+            size_t pendMark = pending.size();
+            queueHeaderComment(hc, pending);
             parseRubySegment(c, suite->m_statements, parts[0], pending,
                 parts, op, &bh, false);
-            if (c.p != pMark)
+            if (c.p != pMark || suite->m_statements.size() != 1
+                || op != parts.size())
             {
+                // ponytail: the lone statement looked past its own line,
+                // left pieces behind, or made several; rewind and keep the
+                // opener verbatim instead, siblings re-read untouched
+                // (the queued header comment with them: raw keeps it glued)
                 c.p = pMark;
+                pending.resize(pendMark);
                 out.push_back(mkRaw(t));
                 return RB_CONT;
             }
+            node->m_endless = true;
             out.push_back(node);
             return RB_CONT;
         }
@@ -5733,6 +6115,7 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         }
         node->m_body = suite;
         out.push_back(node);
+        queueHeaderComment(hc, pending);
         int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
         if (st == RB_EOF) { return RB_EOF; }
         if (st == RB_END)
@@ -5749,7 +6132,9 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
     }
     if (w == "class")
     {
-        std::string rest = trimStr(t.substr(5));
+        std::string code;
+        std::string hc = stripTrailingComment(t, code);
+        std::string rest = trimStr(code.substr(5));
         if (rest.empty())
         {
             out.push_back(mkRaw(t));
@@ -5785,13 +6170,16 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         BlockNode* suite = ASTNodeFactory::createBlockNode();
         node->m_body = suite;
         out.push_back(node);
+        queueHeaderComment(hc, pending);
         int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
         if (st == RB_EOF) { return RB_EOF; }
         return RB_CONT;
     }
     if (w == "module")
     {
-        std::string rest = trimStr(t.substr(6));
+        std::string code;
+        std::string hc = stripTrailingComment(t, code);
+        std::string rest = trimStr(code.substr(6));
         if (rest.empty() || rest.find_first_of(" \t\n") != std::string::npos)
         {
             out.push_back(mkRaw(t));
@@ -5802,6 +6190,7 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         BlockNode* suite = ASTNodeFactory::createBlockNode();
         node->m_body = suite;
         out.push_back(node);
+        queueHeaderComment(hc, pending);
         int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
         if (st == RB_EOF) { return RB_EOF; }
         return RB_CONT;
@@ -5856,9 +6245,11 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
     }
     if (w == "begin")
     {
+        std::string code;
+        std::string hc = stripTrailingComment(t, code);
         std::string head;
         std::string rest;
-        splitRubyThen(t, head, rest);
+        splitRubyThen(code, head, rest);
         if (trimStr(head) != "begin")
         {
             out.push_back(mkRaw(t));
@@ -5869,6 +6260,7 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         node->m_body = suite;
         out.push_back(node);
         if (!rest.empty()) { insertInlineRest(segs, pos, rest, c.prof); }
+        queueHeaderComment(hc, pending);
         int st = parseRubyItems(c, suite->m_statements, pending, segs, pos, false);
         if (st == RB_EOF) { return RB_EOF; }
         if (st == RB_END)
@@ -5913,13 +6305,18 @@ int parseRubySegment(Cursor& c, std::vector<ASTNode*>& out, const std::string& t
         if (st == RB_EOF) { return RB_EOF; }
         return RB_CONT;
     }
-    if (isRubyDoOpener(t, w))
+    // ponytail: the do check runs on comment-stripped code so a trailing
+    // comment cannot hide the opener; the comment opens the body instead
+    std::string doCode;
+    std::string doHc = stripTrailingComment(t, doCode);
+    if (isRubyDoOpener(doCode, firstWord(doCode)))
     {
         // ponytail: one statement for the whole construct: the verbatim
         // opener owns the slot line, the body nests with its own end
         BlockNode* block = ASTNodeFactory::createBlockNode();
         block->m_kind = "do";
-        block->m_statements.push_back(mkRaw(t));
+        block->m_statements.push_back(mkRaw(doCode));
+        queueHeaderComment(doHc, pending);
         int st = parseRubyItems(c, block->m_statements, pending, segs, pos, false);
         out.push_back(block);
         if (st == RB_EOF) { return RB_EOF; }
