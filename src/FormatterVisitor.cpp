@@ -45,6 +45,17 @@ void FormatterVisitor::printNewline()
 
 void FormatterVisitor::printSpace()
 {
+    // ponytail: never stack spaces (callers print one before bodies AND
+    // before braces); a space after space/newline/indent is always a bug
+    if (m_out.getSize() > 0)
+    {
+        const char* data = m_out.getData();
+        char last = data[m_out.getSize() - 1];
+        if (last == ' ' || last == '\n' || last == '\t')
+        {
+            return;
+        }
+    }
     m_out.appendChar(' ');
     m_currentColumn++;
 }
