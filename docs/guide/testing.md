@@ -9,6 +9,18 @@ cmake -S . -B build && cmake --build build --config Release
 ctest --test-dir build --output-on-failure
 ```
 
+Targeted runs (from inside `build/`):
+
+```sh
+ctest -R javaformatter --output-on-failure   # one suite only
+ctest -R "formatter"                         # all 8 formatter suites
+./test_goformatter.exe                       # a suite binary directly
+```
+
+Note: `ctest` without `--test-dir build` from the repo root, or
+`cmake --build build` from inside `build/`, fails with "not a
+directory" / "no tests found" — the paths above are the ones that work.
+
 Every supported language has a dedicated formatter suite plus a sample
 file under `tests/fixtures/`:
 
