@@ -24,6 +24,9 @@ public:
     /** Interface name. */
     std::string m_name;
 
+    /** Kind words verbatim ("private interface"); empty means "interface". */
+    std::string m_kind;
+
     /** Extended interfaces. */
     std::vector<ASTNode*> m_extends;
 
