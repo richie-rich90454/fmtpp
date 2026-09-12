@@ -18,8 +18,16 @@ CppFormatter::~CppFormatter()
 
 void CppFormatter::visitClassDecl(ClassDeclNode& node)
 {
-    // C++ class with access specifiers
-    printToken("class");
+    // C++ class/struct/union with bases. Empty kind means "class",
+    // which keeps previously built ASTs printing as before.
+    if (node.m_kind.empty() || node.m_kind == "class")
+    {
+        printToken("class");
+    }
+    else
+    {
+        printToken(node.m_kind.c_str());
+    }
     printSpace();
     printToken(node.m_name.c_str());
     if (node.m_superClass != NULL)
@@ -40,6 +48,8 @@ void CppFormatter::visitClassDecl(ClassDeclNode& node)
     }
     if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
+    // ponytail: class definitions need their trailing semicolon
+    if (node.m_body != NULL) { printToken(";"); printNewline(); }
 }
 
 void CppFormatter::visitNamespace(NamespaceNode& node)
@@ -53,7 +63,12 @@ void CppFormatter::visitNamespace(NamespaceNode& node)
 
 void CppFormatter::visitFunctionDecl(FunctionDeclNode& node)
 {
-    // C++ function: returnType name(params) { body }
+    // C++ function: [modifiers] returnType name(params) { body }
+    if (!node.m_modifiers.empty())
+    {
+        printToken(node.m_modifiers.c_str());
+        printSpace();
+    }
     if (!node.m_returnType.empty())
     {
         printToken(node.m_returnType.c_str());
@@ -68,7 +83,7 @@ void CppFormatter::visitFunctionDecl(FunctionDeclNode& node)
         if (i < pc - 1) { printComma(); }
     }
     printToken(")");
-    if (node.m_body != NULL) { printNewline(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
 }
 
