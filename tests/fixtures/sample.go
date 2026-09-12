@@ -37,3 +37,22 @@ func main() {
 		break
 	}
 }
+
+// Scale returns v added to itself factor times.
+func Scale(v float64, factor float64) float64 {
+	total := 0.0
+	for i := 0; i < int(factor); i++ {
+		total = total + v
+	}
+	return total
+}
+
+// Label picks a name { switch below }.
+func Label(n int) string {
+	switch n {
+	case 0:
+		return "none"
+	default:
+		return "some"
+	}
+}
