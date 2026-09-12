@@ -21,7 +21,7 @@ function testPackageJson() {
     const pkgPath = path.join(__dirname, '..', 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 
-    assert.strictEqual(pkg.name, 'fmtpp', 'package name should be fmtpp');
+    assert.strictEqual(pkg.name, 'formatpp', 'package name should be formatpp');
     assert.strictEqual(pkg.version, '0.1.0', 'package version should be 0.1.0');
     assert.ok(pkg.bin, 'package.json should have a bin field');
     assert.strictEqual(pkg.bin.fmtpp, './index.js', 'bin entry should point to ./index.js');
