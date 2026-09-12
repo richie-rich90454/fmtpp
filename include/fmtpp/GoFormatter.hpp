@@ -57,6 +57,9 @@ protected:
     /** Print an opening brace in Go style (space before brace) */
     void printGoOpeningBrace();
 
+    /** Switch keyword ("switch", "match" in V) */
+    virtual const char* switchKeyword() const;
+
     /** Print a closing brace */
     void printGoClosingBrace();
 
