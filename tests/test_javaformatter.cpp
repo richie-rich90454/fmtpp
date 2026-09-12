@@ -115,7 +115,8 @@ int main()
         else { printf("Test 3 (import decl): FAILED\n"); failed++; }
     }
 
-    // Test 4: Java switch with break after each case
+    // Test 4: Java switch prints cases verbatim (no invented breaks,
+    // so intentional fallthrough survives formatting)
     {
         OutputBuffer out(4096);
         Config config;
@@ -127,7 +128,7 @@ int main()
         disc->m_name = "day";
         sw->m_discriminant = disc;
         IdentifierNode* caseNode = ASTNodeFactory::createIdentifierNode();
-        caseNode->m_name = "case 1: one()";
+        caseNode->m_name = "case 1: one(); break;";
         sw->m_cases.push_back(caseNode);
         prog->m_statements.push_back(sw);
 
@@ -139,12 +140,16 @@ int main()
         bool ok = true;
         if (strstr(result, "switch") == NULL) { printf("  FAIL: missing 'switch'\n"); ok = false; }
         if (strstr(result, "day") == NULL) { printf("  FAIL: missing 'day'\n"); ok = false; }
-        if (strstr(result, "break;") == NULL) { printf("  FAIL: missing 'break;'\n"); ok = false; }
-        if (ok) { printf("Test 4 (switch/break): PASSED\n"); passed++; }
-        else { printf("Test 4 (switch/break): FAILED\n"); failed++; }
+        if (strstr(result, "case 1: one(); break;") == NULL) { printf("  FAIL: case text altered\n"); ok = false; }
+        // exactly one break: first occurrence must be the last one
+        const char* first = strstr(result, "break;");
+        if (first == NULL) { printf("  FAIL: missing 'break;'\n"); ok = false; }
+        else if (strstr(first + 1, "break;") != NULL) { printf("  FAIL: duplicated 'break;'\n"); ok = false; }
+        if (ok) { printf("Test 4 (switch verbatim): PASSED\n"); passed++; }
+        else { printf("Test 4 (switch verbatim): FAILED\n"); failed++; }
     }
 
-    // Test 5: Java try/catch/finally
+    // Test 5: Java try/catch/finally with a real catch body
     {
         OutputBuffer out(4096);
         Config config;
@@ -157,6 +162,14 @@ int main()
         IdentifierNode* catchClause = ASTNodeFactory::createIdentifierNode();
         catchClause->m_name = "Exception e";
         tc->m_catchClause = catchClause;
+        BlockNode* catchBody = ASTNodeFactory::createBlockNode();
+        ReturnStmtNode* catchRet = ASTNodeFactory::createReturnStmtNode();
+        LiteralNode* negOne = ASTNodeFactory::createLiteralNode();
+        negOne->m_type = LiteralNode::TYPE_NUMBER;
+        negOne->m_value = "-1";
+        catchRet->m_argument = negOne;
+        catchBody->m_statements.push_back(catchRet);
+        tc->m_catchBody = catchBody;
         BlockNode* finallyBody = ASTNodeFactory::createBlockNode();
         tc->m_finallyBlock = finallyBody;
         prog->m_statements.push_back(tc);
@@ -168,8 +181,8 @@ int main()
 
         bool ok = true;
         if (strstr(result, "try") == NULL) { printf("  FAIL: missing 'try'\n"); ok = false; }
-        if (strstr(result, "catch") == NULL) { printf("  FAIL: missing 'catch'\n"); ok = false; }
-        if (strstr(result, "Exception e") == NULL) { printf("  FAIL: missing 'Exception e'\n"); ok = false; }
+        if (strstr(result, "catch (Exception e)") == NULL) { printf("  FAIL: missing 'catch (Exception e)'\n"); ok = false; }
+        if (strstr(result, "return -1;") == NULL) { printf("  FAIL: catch body dropped\n"); ok = false; }
         if (strstr(result, "finally") == NULL) { printf("  FAIL: missing 'finally'\n"); ok = false; }
         if (ok) { printf("Test 5 (try/catch/finally): PASSED\n"); passed++; }
         else { printf("Test 5 (try/catch/finally): FAILED\n"); failed++; }
