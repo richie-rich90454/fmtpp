@@ -135,7 +135,7 @@ void FormatterApp::printUsage()
     printf("  FILE              Format a single file\n");
     printf("\nSupported languages: js, ts, java, c, cpp, cs, go, rs,\n");
     printf("  kotlin, swift, dart, php, scala, objc, zig, d, groovy,\n");
-    printf("  solidity, v, glsl, html, css, json, vue\n");
+    printf("  solidity, v, glsl, html, css, json, vue, python, ruby\n");
     printf("\nfmtpp - formatting code with style and zero leaks\n");
 }
 
