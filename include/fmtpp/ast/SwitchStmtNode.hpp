@@ -1,5 +1,6 @@
 #pragma once
 #include "fmtpp/ASTNode.hpp"
+#include <string>
 #include <vector>
 
 class ASTVisitor;
@@ -24,6 +25,9 @@ public:
 
     /** Discriminant expression. */
     ASTNode* m_discriminant;
+
+    /** Keyword verbatim ("switch", "match", "select"); empty means "switch". */
+    std::string m_keyword;
 
     /** Case clauses. */
     std::vector<ASTNode*> m_cases;
