@@ -62,16 +62,21 @@ function getPrebuiltBinaryPath() {
 }
 
 /**
- * Attempts to compile fmtpp from source using zig cc.
+ * Attempts to compile fmtpp from source using zig cc via toolchain.cmake.
+ * The toolchain file picks the host platform as the target automatically.
  */
 function compileFromSource() {
     const buildDir = path.join(__dirname, 'build');
+    const toolchain = path.join(__dirname, 'toolchain.cmake');
 
     if (!fs.existsSync(buildDir)) {
         fs.mkdirSync(buildDir, { recursive: true });
     }
+    if (!fs.existsSync(toolchain)) {
+        throw new Error('Toolchain file not found at ' + toolchain);
+    }
 
-    const configureCmd = 'cmake -S . -B build -DCMAKE_C_COMPILER=zig -DCMAKE_CXX_COMPILER=zig -DCMAKE_C_COMPILER_WORKS=1 -DCMAKE_CXX_COMPILER_WORKS=1';
+    const configureCmd = 'cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake';
     const buildCmd = 'cmake --build build --config Release';
 
     console.log('fmtpp: prebuilt binary not found, compiling from source with zig cc...');
