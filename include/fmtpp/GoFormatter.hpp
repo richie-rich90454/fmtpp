@@ -45,6 +45,8 @@ public:
     virtual void visitPreprocessorDirective(PreprocessorDirectiveNode& node);
     virtual void visitNamespace(NamespaceNode& node);
     virtual void visitProperty(PropertyNode& node);
+    virtual void visitRawText(RawTextNode& node);
+    virtual void visitHtmlElement(HtmlElementNode& node);
 
 protected:
     /** Visit a child node, skipping NULL */
@@ -86,5 +88,7 @@ protected:
     virtual void visitPreprocessorDirectiveNode(PreprocessorDirectiveNode& node);
     virtual void visitNamespaceNode(NamespaceNode& node);
     virtual void visitPropertyNode(PropertyNode& node);
+    virtual void visitRawTextNode(RawTextNode& node);
+    virtual void visitHtmlElementNode(HtmlElementNode& node);
     virtual void visitThrowStmtNode(ThrowStmtNode& node);
 };
