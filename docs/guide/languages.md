@@ -29,6 +29,8 @@ back to JavaScript.
 | CSS | `.css` `.scss` `.less` | `CssFormatter` | Prettier |
 | JSON | `.json` | `JSFormatter` | Prettier |
 | Vue SFC | `.vue` | `VueFormatter` | Prettier/Volar |
+| Python | `.py` `.pyw` `.pyi` | `PythonFormatter` | black |
+| Ruby | `.rb` | `RubyFormatter` | rubocop |
 
 ## How it maps
 
@@ -84,5 +86,14 @@ pieces:
 - **JSON** — parsed strictly, printed via the JS object/array printers.
 - **Vue** (extends HTML) — `<template>` as HTML, `<script>` via JS/TS by
   `lang`, `<style>` via CSS.
+- **Python** (extends `IndentFormatterBase`) — `def`/`class` with `:`
+  suites (inline or indented), `if`/`elif`/`else`, `for`/`while` with
+  `else`, `try`/`except`/`else`/`finally`, `with`, `match`/`case`,
+  `import`/`from`, decorators, `async`.
+- **Ruby** (extends `IndentFormatterBase`) — `def` (incl. endless)/
+  `class`/`module` with `end`, `if`/`elsif`/`else`/`unless`,
+  `case`/`when`/`in`/`else`, `begin`/`rescue`/`else`/`ensure` plus
+  method-level rescue, `while`/`until`/`for`, `do` blocks, `require`,
+  heredocs, `=begin` blocks, `__END__` tails.
 
 Sample inputs for every language live in `tests/fixtures/sample.<ext>`.
