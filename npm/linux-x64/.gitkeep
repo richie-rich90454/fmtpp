@@ -1,2 +1,3 @@
-# Placeholder for linux-x64 fmtpp binary
-# Easter egg: this directory awaits its native binary
+# Release binaries for linux-x64 land here (fmtpp).
+# Produced by scripts/build-all.sh (needs zig cc); until then the
+# launcher compiles from source automatically. See README.md.

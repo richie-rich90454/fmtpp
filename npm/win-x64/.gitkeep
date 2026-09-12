@@ -1,2 +1,3 @@
-# Placeholder for win-x64 fmtpp.exe binary
-# Easter egg: this directory awaits its native binary
+# Release binaries for win-x64 land here (fmtpp.exe).
+# Produced by scripts/build-all.sh (needs zig cc); until then the
+# launcher compiles from source automatically. See README.md.
