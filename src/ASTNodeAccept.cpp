@@ -28,6 +28,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 
 // Easter egg: the accept() implementations - the bridge between nodes and visitors
 
@@ -52,11 +54,11 @@ IfStmtNode::IfStmtNode() : m_condition(NULL), m_thenBranch(NULL), m_elseBranch(N
 IfStmtNode::~IfStmtNode() {}
 void IfStmtNode::accept(ASTVisitor& visitor) { visitor.visitIfStmt(*this); }
 
-ForStmtNode::ForStmtNode() : m_init(NULL), m_condition(NULL), m_update(NULL), m_classic(true), m_body(NULL) {}
+ForStmtNode::ForStmtNode() : m_init(NULL), m_condition(NULL), m_update(NULL), m_classic(true), m_body(NULL), m_elseBlock(NULL) {}
 ForStmtNode::~ForStmtNode() {}
 void ForStmtNode::accept(ASTVisitor& visitor) { visitor.visitForStmt(*this); }
 
-WhileStmtNode::WhileStmtNode() : m_condition(NULL), m_body(NULL) {}
+WhileStmtNode::WhileStmtNode() : m_condition(NULL), m_body(NULL), m_elseBlock(NULL) {}
 WhileStmtNode::~WhileStmtNode() {}
 void WhileStmtNode::accept(ASTVisitor& visitor) { visitor.visitWhileStmt(*this); }
 
@@ -76,7 +78,7 @@ ThrowStmtNode::ThrowStmtNode() : m_expression(NULL) {}
 ThrowStmtNode::~ThrowStmtNode() {}
 void ThrowStmtNode::accept(ASTVisitor& visitor) { visitor.visitThrowStmt(*this); }
 
-TryCatchStmtNode::TryCatchStmtNode() : m_body(NULL), m_catchClause(NULL), m_catchBody(NULL), m_finallyBlock(NULL) {}
+TryCatchStmtNode::TryCatchStmtNode() : m_body(NULL), m_catchClause(NULL), m_catchBody(NULL), m_finallyBlock(NULL), m_elseBlock(NULL) {}
 TryCatchStmtNode::~TryCatchStmtNode() {}
 void TryCatchStmtNode::accept(ASTVisitor& visitor) { visitor.visitTryCatchStmt(*this); }
 
@@ -151,4 +153,12 @@ void RawTextNode::accept(ASTVisitor& visitor) { visitor.visitRawText(*this); }
 HtmlElementNode::HtmlElementNode() : m_selfClosing(false) {}
 HtmlElementNode::~HtmlElementNode() {}
 void HtmlElementNode::accept(ASTVisitor& visitor) { visitor.visitHtmlElement(*this); }
+
+WithNode::WithNode() : m_context(NULL), m_body(NULL) {}
+WithNode::~WithNode() {}
+void WithNode::accept(ASTVisitor& visitor) { visitor.visitWith(*this); }
+
+SwitchCaseNode::SwitchCaseNode() : m_pattern(NULL), m_body(NULL) {}
+SwitchCaseNode::~SwitchCaseNode() {}
+void SwitchCaseNode::accept(ASTVisitor& visitor) { visitor.visitSwitchCase(*this); }
 
