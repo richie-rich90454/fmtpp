@@ -102,9 +102,44 @@ function testEnvOverride() {
     console.log('testEnvOverride passed');
 }
 
+// Validate that the release path exists for every binary slot:
+// build-all.sh must list all targets and toolchain.cmake must map
+// each one to a zig triple. Slots are filled at release time.
+function testReleasePath() {
+    const root = path.join(__dirname, '..');
+    const buildAll = fs.readFileSync(path.join(root, 'scripts', 'build-all.sh'), 'utf8');
+    const toolchain = fs.readFileSync(path.join(root, 'toolchain.cmake'), 'utf8');
+
+    const targets = [
+        'linux-x64',
+        'linux-arm64',
+        'macos-x64',
+        'macos-arm64',
+        'windows-x64'
+    ];
+
+    for (let i = 0; i < targets.length; i++) {
+        assert.ok(buildAll.indexOf(targets[i]) >= 0,
+            'build-all.sh should build target: ' + targets[i]);
+        assert.ok(toolchain.indexOf(targets[i]) >= 0,
+            'toolchain.cmake should map target: ' + targets[i]);
+    }
+
+    // The Windows slot is win-x64 while the zig target is windows-x64.
+    assert.ok(buildAll.indexOf('npm/win-x64') >= 0,
+        'build-all.sh should write Windows binaries to npm/win-x64');
+
+    assert.ok(toolchain.indexOf('ZIG_TARGET') >= 0,
+        'toolchain.cmake should define zig targets');
+    console.log('testReleasePath passed');
+}
+
 // Validate fallback compilation entry exists and throws when zig is unavailable.
 function testFallbackPath() {
     assert.strictEqual(typeof index.compileFromSource, 'function', 'compileFromSource should be exported');
+    const src = index.compileFromSource.toString();
+    assert.ok(src.indexOf('toolchain.cmake') >= 0,
+        'compileFromSource should build through toolchain.cmake (zig cc needs it)');
     console.log('testFallbackPath passed');
 }
 
@@ -113,6 +148,7 @@ function main() {
     testPlatformDetection();
     testBinaryPathResolution();
     testBinarySlotsExist();
+    testReleasePath();
     testEnvOverride();
     testFallbackPath();
     console.log('\nAll NPM packaging tests passed. Easter egg: fmtpp is ready to ship');
