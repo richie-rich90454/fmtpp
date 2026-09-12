@@ -30,3 +30,30 @@ fun main() {
         else -> println("who?")
     }
 }
+
+// extra helpers below
+data class Point(val x: Int, val y: Int)
+
+interface Pet {
+    fun speak(): String
+}
+
+fun total(xs: List<Int>): Int {
+    var sum = 0
+    for (x in xs) {
+        sum += x
+    }
+    var left = sum
+    while (left > 100) {
+        left -= 100
+    }
+    return left
+}
+
+fun label(n: Int): String {
+    // braces { } in comments stay put
+    if (n <= 0) {
+        return "none"
+    }
+    return "some $n"
+}
