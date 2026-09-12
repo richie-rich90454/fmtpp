@@ -827,6 +827,10 @@ bool consumeBalancedBraces(Cursor& c)
 // --- Statement builders ---
 
 // Assignment '=' that is not ==, !=, >=, <=, =>, += and friends.
+// Defined with the Ruby engine below; declared here so the shared
+// assignment scanner can treat %-literals as opaque units too.
+bool skipRubyPercent(const char* d, size_t n, size_t& p);
+
 size_t findAssign(const std::string& s)
 {
     char quote = 0;
@@ -1821,8 +1825,16 @@ bool headerIsExpression(const std::string& header)
                 else if (ch == quote) { quote = 0; }
                 continue;
             }
-            if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; continue; }
-            if (ch == '(') { paren++; }
+        if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; continue; }
+        if (ch == '%')
+        {
+            // ponytail: Ruby %-literals are opaque (= signs inside are not
+            // assignments); anything else steps over plainly, so C-style
+            // modulo and format verbs never notice
+            size_t j = i;
+            if (skipRubyPercent(t.c_str(), t.size(), j)) { i = j - 1; continue; }
+        }
+        if (ch == '(') { paren++; }
             else if (ch == ')') { if (paren > 0) paren--; }
             else if (ch == '[') { brack++; }
             else if (ch == ']') { if (brack > 0) brack--; }
@@ -3626,6 +3638,50 @@ std::string stripSuiteColon(const std::string& text, std::string& trailingCommen
     return code;
 }
 
+// Skips one Python lambda header starting at the 'l'. Returns the position
+// of the lambda's own colon, or npos when this is not a lambda expression
+// (comparison, call, attribute, plain name...). Only flat params are
+// consumed (words, commas, stars, dots, single-= defaults); nested lambdas
+// recurse, while brackets/strings stop the scan (the main scanner tracks
+// those correctly itself, e.g. defaults holding dicts or slices).
+size_t skipPythonLambda(const std::string& t, size_t at)
+{
+    size_t n = t.size();
+    size_t p = at + 6; // past "lambda"
+    for (;;)
+    {
+        while (p < n && (t[p] == ' ' || t[p] == '\t' || t[p] == '\n')) { p++; }
+        if (p >= n) { return std::string::npos; }
+        char ch = t[p];
+        if (ch == ':') { return p; }
+        if (ch == ',' || ch == '*') { p++; continue; }
+        if (ch == '=' && !(p + 1 < n && t[p + 1] == '='))
+        {
+            // ponytail: single = is a default; == is a comparison (bail,
+            // the main scanner then finds the real suite colon itself)
+            p++;
+            continue;
+        }
+        if (ch == '.' || ch == '_' || isAlpha(ch) || isDigit(ch))
+        {
+            size_t ws = p;
+            while (p < n && (isIdent(t[p]) && t[p] != '$')) { p++; }
+            std::string word(t.data() + ws, p - ws);
+            bool beforeOk = (ws == 0) || (!isIdent(t[ws - 1]) && t[ws - 1] != '.');
+            bool afterOk = (p >= n) || !isIdent(t[p]);
+            if (word == "lambda" && beforeOk && afterOk)
+            {
+                size_t past = skipPythonLambda(t, ws);
+                if (past == std::string::npos) { return std::string::npos; }
+                p = past + 1;
+                continue;
+            }
+            continue;
+        }
+        return std::string::npos;
+    }
+}
+
 // Splits "header: suite..." at the FIRST depth-0 colon (string and
 // paren/bracket/brace aware). A suite rest holding only a # comment
 // counts as the trailing comment; a # comment inside the header is
@@ -3655,6 +3711,24 @@ bool splitSuite(const std::string& t, size_t from, std::string& header,
         else if (ch == ']') { if (brack > 0) brack--; }
         else if (ch == '{') { brace++; }
         else if (ch == '}') { if (brace > 0) brace--; }
+        else if ((ch == '_' || isAlpha(ch)) && paren == 0 && brack == 0 && brace == 0)
+        {
+            // ponytail: a bare lambda's colon is not the suite colon
+            // ("if lambda: 1: pass" conditions on the lambda itself)
+            size_t ws = i;
+            size_t j = i;
+            while (j < t.size() && (isIdent(t[j]) && t[j] != '$')) { j++; }
+            std::string word(t.data() + ws, j - ws);
+            bool beforeOk = (ws == 0) || (!isIdent(t[ws - 1]) && t[ws - 1] != '.');
+            bool afterOk = (j >= t.size()) || !isIdent(t[j]);
+            i = j - 1;
+            if (word == "lambda" && beforeOk && afterOk)
+            {
+                size_t past = skipPythonLambda(t, ws);
+                if (past != std::string::npos) { i = past; }
+            }
+            continue;
+        }
         else if (ch == ':' && paren == 0 && brack == 0 && brace == 0)
         {
             colon = i;
@@ -4698,6 +4772,63 @@ namespace {
 // multi-line code. Openers consume their bodies via recursion; the recursion
 // stops (rewound) on continuations and consumes the closing end.
 
+// Skips one Ruby %-literal starting at '%' (opaque: brackets, semicolons,
+// quotes and = signs inside never count). True when a literal opened;
+// plain % (modulo, format, %=) is left alone. Paired delimeters nest,
+// anything else closes on its twin, backslashes escape. Safe for other
+// languages too: outside Ruby a glued %letter+delim span is never valid
+// code, while %, %= and letter forms without delimeters step over plainly.
+bool skipRubyPercent(const char* d, size_t n, size_t& p)
+{
+    // caller guarantees d[p] == '%'
+    size_t q = p + 1;
+    if (q < n && d[q] == '%') { p += 2; return true; }
+    if (q < n && isAlpha(d[q]))
+    {
+        char m = d[q];
+        if (m != 'q' && m != 'Q' && m != 'w' && m != 'W' && m != 'i'
+            && m != 'I' && m != 'r' && m != 's' && m != 'x' && m != 'X')
+        {
+            return false;
+        }
+        q++;
+    }
+    if (q >= n) { return false; }
+    char open = d[q];
+    if (open == ' ' || open == '\t' || open == '\n' || open == '\r'
+        || open == '=' || isAlpha(open) || isDigit(open) || open == '_')
+    {
+        return false;
+    }
+    char close = open;
+    if (open == '(') { close = ')'; }
+    else if (open == '[') { close = ']'; }
+    else if (open == '{') { close = '}'; }
+    else if (open == '<') { close = '>'; }
+    int depth = 0;
+    q++;
+    while (q < n)
+    {
+        char ch = d[q];
+        if (ch == '\\' && q + 1 < n) { q += 2; continue; }
+        if (open == close)
+        {
+            if (ch == close) { p = q + 1; return true; }
+        }
+        else if (ch == open) { depth++; }
+        else if (ch == close)
+        {
+            if (depth == 0) { p = q + 1; return true; }
+            depth--;
+        }
+        q++;
+    }
+    // ponytail: unterminated runs to the end of the scanned text; content
+    // stays verbatim either way, it just neither splits nor joins on it
+    p = q;
+    return true;
+}
+
 // Collects <<[-~]?["']?WORD heredoc markers from one code line.
 // String-aware (strings stay opaque); stops at #. << needs its word glued:
 // spaces mean a shift operator, <<= is an assignment, quoted needs no space.
@@ -4716,6 +4847,12 @@ void findRubyHeredocs(const std::string& line, const LangProfile* prof,
         if (ch == '#') { break; }
         if (ch == '"' || ch == '\'' || ch == '`') { skipString(s); continue; }
         if (ch == '/') { stepUnit(s, dummy1, dummy2, dummy3); continue; }
+        if (ch == '%')
+        {
+            // ponytail: %-literals are opaque (<< and ; inside are content)
+            size_t j = s.p;
+            if (skipRubyPercent(s.d, s.n, j)) { s.p = j; continue; }
+        }
         if (ch == '<' && s.p + 1 < s.n && s.d[s.p + 1] == '<')
         {
             size_t j = s.p + 2;
@@ -4766,6 +4903,12 @@ bool rubyJoins(const std::string& line, const LangProfile* prof,
         if (ch == '#') { break; }
         if (ch == '"' || ch == '\'' || ch == '`') { skipString(s); continue; }
         if (ch == '/') { stepUnit(s, dummy1, dummy2, dummy3); continue; }
+        if (ch == '%')
+        {
+            // ponytail: %-literals are opaque (brackets inside do not join)
+            size_t j = s.p;
+            if (skipRubyPercent(s.d, s.n, j)) { s.p = j; continue; }
+        }
         if (ch == '(') { paren++; }
         else if (ch == ')') { paren--; }
         else if (ch == '[') { brack++; }
@@ -4822,6 +4965,12 @@ void splitRubyLine(const std::string& text, const LangProfile* prof,
         if (ch == '#') { break; }
         if (ch == '"' || ch == '\'' || ch == '`') { skipString(s); continue; }
         if (ch == '/') { stepUnit(s, dummy1, dummy2, dummy3); continue; }
+        if (ch == '%')
+        {
+            // ponytail: %-literals are opaque (; inside never splits)
+            size_t j = s.p;
+            if (skipRubyPercent(s.d, s.n, j)) { s.p = j; continue; }
+        }
         if (ch == '(') { paren++; }
         else if (ch == ')') { if (paren > 0) paren--; }
         else if (ch == '[') { brack++; }
@@ -4970,6 +5119,12 @@ void splitRubyThen(const std::string& header, std::string& head,
         }
         if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; p++; continue; }
         if (ch == '#') { break; }
+        if (ch == '%')
+        {
+            // ponytail: %-literals are opaque (then/do inside are content)
+            size_t j = p;
+            if (skipRubyPercent(d, n, j)) { p = j; continue; }
+        }
         if (ch == '(') { paren++; }
         else if (ch == ')') { if (paren > 0) paren--; }
         else if (ch == '[') { brack++; }
@@ -5019,6 +5174,12 @@ bool splitTrailingEnd(const std::string& text, std::string& head)
         }
         if (ch == '"' || ch == '\'' || ch == '`') { quote = ch; p++; continue; }
         if (ch == '#') { break; }
+        if (ch == '%')
+        {
+            // ponytail: %-literals are opaque (end inside is content)
+            size_t j = p;
+            if (skipRubyPercent(d, n, j)) { p = j; continue; }
+        }
         if (ch == '(') { paren++; }
         else if (ch == ')') { if (paren > 0) paren--; }
         else if (ch == '[') { brack++; }
