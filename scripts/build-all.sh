@@ -34,6 +34,10 @@ for target in "${TARGETS[@]}"; do
     cmake --build "${build_dir}" --config Release -j"$(nproc 2>/dev/null || echo 4)"
 
     out_dir="npm/${target}"
+    if [ "${target}" = "windows-x64" ]; then
+        # ponytail: launcher platform keys use win-, not windows-
+        out_dir="npm/win-x64"
+    fi
     mkdir -p "${out_dir}"
 
     if [ "${target}" = "windows-x64" ]; then
