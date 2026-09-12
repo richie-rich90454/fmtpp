@@ -7,7 +7,7 @@
 
 static const char* SAMPLE_JS = "const x = 1;\nconst y = 2;\nfunction add(a, b) { return a + b; }\n";
 
-extern MemoryPool* g_pool;
+extern thread_local MemoryPool* g_pool;
 
 int main()
 {
