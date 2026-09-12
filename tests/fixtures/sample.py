@@ -43,3 +43,26 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# geometry helpers below
+def area(width: float, height: float = 1.0) -> float:
+    total = 0.0
+    for _ in range(int(height)):
+        total = total + width
+    while total > 100.0:
+        total = total - 100.0
+    return total
+
+
+class Counter:
+    # braces { } in comments stay put
+
+    def __init__(self) -> None:
+        self.value = 0
+
+    def add(self, n: int) -> int:
+        if n <= 0:
+            return self.value
+        self.value = self.value + n
+        return self.value
