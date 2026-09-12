@@ -22,4 +22,8 @@ public:
     virtual void visitNamespaceNode(NamespaceNode& node);
     virtual void visitImportDeclNode(ImportDeclNode& node);
     virtual void visitPreprocessorDirectiveNode(PreprocessorDirectiveNode& node);
+    virtual void visitLiteralNode(LiteralNode& node);
+
+protected:
+    virtual const char* switchKeyword() const;
 };
