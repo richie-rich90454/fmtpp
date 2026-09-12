@@ -1,7 +1,7 @@
 # fmtpp — Format++
 
 A professional-grade, multi-language code formatter written in C++.
-One static binary, twenty-five languages, zero runtime dependencies.
+One static binary, twenty-six languages, zero runtime dependencies.
 
 - [Supported languages](#supported-languages)
 - [Install](#install)
@@ -50,6 +50,8 @@ fall back to JavaScript.
 | CSS        | `.css` `.scss` `.less`      | `CssFormatter`     | Prettier           |
 | JSON       | `.json`                     | `JSFormatter`      | Prettier           |
 | Vue SFC    | `.vue`                      | `VueFormatter`     | Prettier/Volar     |
+| Python     | `.py` `.pyw` `.pyi`          | `PythonFormatter`  | black              |
+| Ruby       | `.rb`                       | `RubyFormatter`    | rubocop            |
 
 ## Install
 
@@ -387,7 +389,7 @@ ThreadPool fans multi-file runs out; each job owns its buffer and parser.
 
 ## Current status and limitations
 
-Implemented and tested: a real parser for all 25 languages, all
+Implemented and tested: a real parser for all 26 languages, all
 formatters, config load/merge, `learn`, TUI `config`, `bench`
 (+`--compare`), thread-pool multi-file runs, npm packaging with five
 prebuilt targets.
