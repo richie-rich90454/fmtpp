@@ -26,6 +26,8 @@
 #include "fmtpp/ast/PreprocessorDirectiveNode.hpp"
 #include "fmtpp/ast/NamespaceNode.hpp"
 #include "fmtpp/ast/PropertyNode.hpp"
+#include "fmtpp/ast/RawTextNode.hpp"
+#include "fmtpp/ast/HtmlElementNode.hpp"
 #include <cstdio>
 #include <vector>
 
@@ -212,6 +214,14 @@ void ASTPrinter::visitTryCatchStmt(TryCatchStmtNode& node)
     m_indentLevel++;
     if (node.m_body != NULL) { node.m_body->accept(*this); }
     if (node.m_catchClause != NULL) { node.m_catchClause->accept(*this); }
+    if (node.m_catchBody != NULL) { node.m_catchBody->accept(*this); }
+    {
+        std::vector<ASTNode*>::size_type eci;
+        for (eci = 0; eci < node.m_extraCatches.size(); eci++)
+        {
+            if (node.m_extraCatches[eci] != NULL) { node.m_extraCatches[eci]->accept(*this); }
+        }
+    }
     if (node.m_finallyBlock != NULL) { node.m_finallyBlock->accept(*this); }
     m_indentLevel--;
 }
@@ -421,5 +431,40 @@ void ASTPrinter::visitProperty(PropertyNode& node)
     m_indentLevel++;
     if (node.m_key != NULL) { node.m_key->accept(*this); }
     if (node.m_value != NULL) { node.m_value->accept(*this); }
+    m_indentLevel--;
+}
+
+void ASTPrinter::visitRawText(RawTextNode& node)
+{
+    printIndent();
+    printf("RawTextNode\n");
+    m_indentLevel++;
+    printIndent();
+    printf("text: %s\n", node.m_text.c_str());
+    m_indentLevel--;
+}
+
+void ASTPrinter::visitHtmlElement(HtmlElementNode& node)
+{
+    printIndent();
+    printf("HtmlElementNode\n");
+    m_indentLevel++;
+    printIndent();
+    printf("tag: %s\n", node.m_tag.c_str());
+    {
+        std::vector<std::string>::size_type i;
+        for (i = 0; i < node.m_attrs.size(); i++)
+        {
+            printIndent();
+            printf("attr: %s\n", node.m_attrs[i].c_str());
+        }
+    }
+    {
+        std::vector<ASTNode*>::size_type i;
+        for (i = 0; i < node.m_children.size(); i++)
+        {
+            if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
+        }
+    }
     m_indentLevel--;
 }
