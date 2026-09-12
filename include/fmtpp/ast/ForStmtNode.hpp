@@ -30,6 +30,13 @@ public:
     /** Update expression (e.g., i++). */
     ASTNode* m_update;
 
+    /** Loop keyword: "for" (default when empty), "foreach". */
+    std::string m_keyword;
+
+    /** True for C-style (init; cond; update) headers, false for raw
+        single headers such as for-in, foreach and range loops. */
+    bool m_classic;
+
     /** Loop body (BlockNode). */
     ASTNode* m_body;
 };
