@@ -26,6 +26,10 @@ public:
     /** Function name. */
     std::string m_name;
 
+    /** Leading modifiers verbatim ("static", "pub async", "suspend", ...).
+        Empty when none; formatters prepend it with a space. */
+    std::string m_modifiers;
+
     /** Parameter list. */
     std::vector<ASTNode*> m_params;
 
