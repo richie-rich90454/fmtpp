@@ -15,6 +15,8 @@ public:
     virtual ~TSFormatter();
 
     virtual void visitFunctionDeclNode(FunctionDeclNode& node);
+    virtual void visitVariableDeclNode(VariableDeclNode& node);
+    virtual void visitPropertyNode(PropertyNode& node);
     virtual void visitInterfaceDeclNode(InterfaceDeclNode& node);
     virtual void visitEnumDeclNode(EnumDeclNode& node);
     virtual void visitTypeAliasNode(TypeAliasNode& node);
