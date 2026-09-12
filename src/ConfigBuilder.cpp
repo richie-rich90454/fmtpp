@@ -171,3 +171,46 @@ Config ConfigBuilder::buildDefault()
     // Easter egg: building a default config, fresh from the factory
     return Config();
 }
+
+Config ConfigBuilder::buildForFile(const std::string& filepath)
+{
+    // ponytail: fopen probe + string walk; no <filesystem> so this stays C++11
+    std::string dir;
+    size_t slash = filepath.find_last_of("/\\");
+    dir = (slash == std::string::npos) ? std::string(".") : filepath.substr(0, slash);
+    if (dir.empty())
+    {
+        dir = "/";
+    }
+
+    for (;;)
+    {
+        std::string candidate = dir + "/.fmtpp.toml";
+        FILE* probe = fopen(candidate.c_str(), "r");
+        if (probe != NULL)
+        {
+            fclose(probe);
+            return buildFromFile(candidate);
+        }
+        if (dir == "." || dir == "/" || dir == "\\" ||
+            (dir.size() == 2 && dir[1] == ':'))
+        {
+            break;
+        }
+        size_t parent = dir.find_last_of("/\\");
+        if (parent == std::string::npos)
+        {
+            dir = ".";
+        }
+        else if (parent == 0)
+        {
+            dir = "/";
+        }
+        else
+        {
+            dir = dir.substr(0, parent);
+        }
+    }
+
+    return buildDefault();
+}
