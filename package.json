@@ -28,7 +28,7 @@
     "url": "https://github.com/fmtpp/fmtpp"
   },
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=22.0.0"
   },
   "files": [
     "index.js",
