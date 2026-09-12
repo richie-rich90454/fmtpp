@@ -26,6 +26,8 @@
 #include "fmtpp/ast/PreprocessorDirectiveNode.hpp"
 #include "fmtpp/ast/NamespaceNode.hpp"
 #include "fmtpp/ast/PropertyNode.hpp"
+#include "fmtpp/ast/RawTextNode.hpp"
+#include "fmtpp/ast/HtmlElementNode.hpp"
 #include <cstdio>
 
 // Easter egg: the Rust formatter awakens - ready to fight the borrow checker
@@ -64,6 +66,11 @@ void RustFormatter::visitProgram(ProgramNode& node)
 // ================================================================
 void RustFormatter::visitFunctionDecl(FunctionDeclNode& node)
 {
+    if (!node.m_modifiers.empty())
+    {
+        printToken(node.m_modifiers.c_str());
+        printSpace();
+    }
     printToken("fn");
     printSpace();
     printToken(node.m_name.c_str());
@@ -89,6 +96,13 @@ void RustFormatter::visitFunctionDecl(FunctionDeclNode& node)
 // ================================================================
 void RustFormatter::visitVariableDecl(VariableDeclNode& node)
 {
+    // ponytail: shapeless leftovers (struct fields as raw text) print verbatim
+    if (node.m_kind.empty() && node.m_type.empty() && node.m_initializer == NULL)
+    {
+        printToken(node.m_name.c_str());
+        printNewline();
+        return;
+    }
     printToken("let");
     if (node.m_kind == "mut")
     {
@@ -134,7 +148,22 @@ void RustFormatter::visitIfStmt(IfStmtNode& node)
 // ================================================================
 void RustFormatter::visitForStmt(ForStmtNode& node)
 {
-    printToken("for");
+    // ponytail: a C-style triple here means invalid Rust input;
+    // print it part-preserving rather than dropping the update
+    if (node.m_classic && node.m_update != NULL)
+    {
+        printToken("for (");
+        if (node.m_init != NULL) { node.m_init->accept(*this); }
+        printToken("; ");
+        if (node.m_condition != NULL) { node.m_condition->accept(*this); }
+        printToken("; ");
+        node.m_update->accept(*this);
+        printToken(")");
+        if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+        else { printToken(";"); printNewline(); }
+        return;
+    }
+    printToken(node.m_keyword.empty() ? "for" : node.m_keyword.c_str());
     printSpace();
     if (node.m_init != NULL) { node.m_init->accept(*this); }
     if (node.m_condition != NULL)
@@ -247,6 +276,17 @@ void RustFormatter::visitTryCatchStmt(TryCatchStmtNode& node)
         printNewline();
         printIndent();
         node.m_catchClause->accept(*this);
+    }
+    if (node.m_catchBody != NULL)
+    {
+        printNewline();
+        printIndent();
+        node.m_catchBody->accept(*this);
+    }
+    for (size_t eci = 0; eci < node.m_extraCatches.size(); eci++)
+    {
+        if (node.m_extraCatches[eci] == NULL) { continue; }
+        node.m_extraCatches[eci]->accept(*this);
     }
     if (node.m_finallyBlock != NULL)
     {
@@ -402,6 +442,34 @@ void RustFormatter::visitArrowFunction(ArrowFunctionNode& node)
 // ================================================================
 void RustFormatter::visitClassDecl(ClassDeclNode& node)
 {
+    // ponytail: struct stays a struct even with visibility prefixes
+    // (pub struct); anything else is an impl block
+    std::string kind = node.m_kind;
+    std::string prefix;
+    if (kind == "struct")
+    {
+        // plain struct, nothing to strip
+    }
+    else if (kind.size() > 7
+        && kind.compare(kind.size() - 7, 7, " struct") == 0)
+    {
+        prefix = kind.substr(0, kind.size() - 7);
+        kind = "struct";
+    }
+    if (kind == "struct")
+    {
+        if (!prefix.empty())
+        {
+            printToken(prefix.c_str());
+            printSpace();
+        }
+        printToken("struct");
+        printSpace();
+        printToken(node.m_name.c_str());
+        if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+        else { printToken(";"); printNewline(); }
+        return;
+    }
     if (node.m_superClass != NULL)
     {
         printToken("impl");
@@ -582,6 +650,22 @@ void RustFormatter::visitProperty(PropertyNode& node)
     if (node.m_key != NULL) { node.m_key->accept(*this); }
     printToken(": ");
     if (node.m_value != NULL) { node.m_value->accept(*this); }
+}
+
+void RustFormatter::visitRawText(RawTextNode& node)
+{
+    printToken(node.m_text.c_str());
+    printNewline();
+}
+
+void RustFormatter::visitHtmlElement(HtmlElementNode& node)
+{
+    size_t cc = node.m_children.size();
+    for (size_t i = 0; i < cc; i++)
+    {
+        if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
+        if (i < cc - 1) { printNewline(); }
+    }
 }
 
 // Easter egg: RustFormatter complete - the borrow checker is satisfied... for now
