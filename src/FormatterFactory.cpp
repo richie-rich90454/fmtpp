@@ -25,6 +25,8 @@
 #include "fmtpp/HtmlFormatter.hpp"
 #include "fmtpp/CssFormatter.hpp"
 #include "fmtpp/VueFormatter.hpp"
+#include "fmtpp/PythonFormatter.hpp"
+#include "fmtpp/RubyFormatter.hpp"
 #include <cstring>
 
 // Easter egg: one factory to format them all, one factory to indent them
@@ -156,6 +158,15 @@ std::string FormatterFactory::detectLanguage(const char* filepath)
     {
         return "vue";
     }
+    if (strcmp(ext, "py") == 0 || strcmp(ext, "pyw") == 0
+        || strcmp(ext, "pyi") == 0)
+    {
+        return "python";
+    }
+    if (strcmp(ext, "rb") == 0)
+    {
+        return "ruby";
+    }
 
     return "js";
 }
@@ -254,6 +265,14 @@ FormatterVisitor* FormatterFactory::create(const std::string& language, OutputBu
     if (language == "vue")
     {
         return new VueFormatter(out, config);
+    }
+    if (language == "python" || language == "py")
+    {
+        return new PythonFormatter(out, config);
+    }
+    if (language == "ruby" || language == "rb")
+    {
+        return new RubyFormatter(out, config);
     }
     return new JSFormatter(out, config);
 }
