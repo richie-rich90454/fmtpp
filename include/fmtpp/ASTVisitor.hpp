@@ -30,6 +30,8 @@ class NamespaceNode;
 class PropertyNode;
 class RawTextNode;
 class HtmlElementNode;
+class WithNode;
+class SwitchCaseNode;
 
 /**
  * Abstract visitor interface for AST traversal.
@@ -71,4 +73,6 @@ public:
     virtual void visitProperty(PropertyNode& node) = 0;
     virtual void visitRawText(RawTextNode& node) = 0;
     virtual void visitHtmlElement(HtmlElementNode& node) = 0;
+    virtual void visitWith(WithNode& node) = 0;
+    virtual void visitSwitchCase(SwitchCaseNode& node) = 0;
 };
