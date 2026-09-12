@@ -1,7 +1,7 @@
 {
   "name": "fmtpp",
   "version": "0.1.0",
-  "description": "A professional code formatter for 25 languages, from JS to Zig to Vue",
+  "description": "A professional code formatter for 26 languages, from JS to Zig to Vue to Python to Ruby",
   "main": "index.js",
   "bin": {
     "fmtpp": "./index.js"
@@ -35,7 +35,9 @@
     "html",
     "css",
     "json",
-    "vue"
+    "vue",
+    "python",
+    "ruby"
   ],
   "author": "fmtpp contributors",
   "license": "MIT",
