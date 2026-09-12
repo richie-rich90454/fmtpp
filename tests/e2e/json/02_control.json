@@ -1,0 +1,11 @@
+{
+  "name": "demo",
+  "version": "2.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "^19.0.0",
+    "next": "^15.0.0"
+  },
+  "flags": [true, false, null],
+  "limits": { "cpu": 2, "mem": "4G" }
+}
