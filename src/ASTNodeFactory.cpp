@@ -30,6 +30,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 #include <new>
 
 // Easter egg: the factory floor - where raw memory becomes meaningful AST nodes
@@ -180,4 +182,14 @@ RawTextNode* ASTNodeFactory::createRawTextNode()
 HtmlElementNode* ASTNodeFactory::createHtmlElementNode()
 {
     return new (g_pool->allocate(sizeof(HtmlElementNode))) HtmlElementNode();
+}
+
+WithNode* ASTNodeFactory::createWithNode()
+{
+    return new (g_pool->allocate(sizeof(WithNode))) WithNode();
+}
+
+SwitchCaseNode* ASTNodeFactory::createSwitchCaseNode()
+{
+    return new (g_pool->allocate(sizeof(SwitchCaseNode))) SwitchCaseNode();
 }
