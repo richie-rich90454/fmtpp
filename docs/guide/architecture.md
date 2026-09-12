@@ -17,7 +17,8 @@ ASTNode (abstract)
 │   TemplateLiteralNode, ArrowFunctionNode, ClassDeclNode,
 │   InterfaceDeclNode, EnumDeclNode, TypeAliasNode, ImportDeclNode,
 │   ExportDeclNode, PreprocessorDirectiveNode, NamespaceNode,
-│   PropertyNode, RawTextNode, HtmlElementNode
+│   PropertyNode, RawTextNode, HtmlElementNode, WithNode,
+│   SwitchCaseNode
 │
 ASTVisitor
 ├── FormatterVisitor (abstract)
@@ -31,7 +32,10 @@ ASTVisitor
 │   │   └── HtmlFormatter → VueFormatter
 │   │   └── CssFormatter
 │   ├── GoFormatter → VFormatter
-│   └── RustFormatter
+│   ├── RustFormatter
+│   └── IndentFormatterBase          <-- megaclass (no braces)
+│       ├── PythonFormatter (colon suites, pass, match/case)
+│       └── RubyFormatter (end suites, do blocks, heredocs)
 ├── StyleDetector   (fmtpp learn → .fmtpp.toml)
 └── ASTPrinter      (debug tree dumps)
 ```
@@ -50,7 +54,10 @@ aware scanning, depth tracking, per-language keywords for declarations,
 imports, control flow and attributes. Leaf expressions stay verbatim
 and anything unrecognized becomes `RawTextNode`, so output is never
 invented. HTML/XML parse as tag trees, JSON with a strict mini-parser,
-Vue SFCs as HTML with per-block sub-formatting.
+Vue SFCs as HTML with per-block sub-formatting. Python parses with an
+indentation engine (logical lines, suite holders for if/try/loop
+chains); Ruby with an end-delimited segment engine (holders for
+if/case/begin/method chains, heredoc and `=begin` awareness).
 
 ## Performance strategy
 
