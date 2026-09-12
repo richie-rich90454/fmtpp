@@ -2,7 +2,7 @@
 
 ## C++ suites (CTest)
 
-33 suites, run from a configured build:
+35 suites, run from a configured build:
 
 ```sh
 cmake -S . -B build && cmake --build build --config Release
@@ -13,7 +13,7 @@ Targeted runs (from inside `build/`):
 
 ```sh
 ctest -R javaformatter --output-on-failure   # one suite only
-ctest -R "formatter"                         # all 23 formatter suites
+ctest -R "formatter"                         # all 25 formatter suites
 ./test_goformatter.exe                       # a suite binary directly
 ```
 
@@ -34,6 +34,8 @@ file under `tests/fixtures/`:
 | `test_csharpformatter` | `sample.cs` |
 | `test_goformatter` | `sample.go` |
 | `test_rustformatter` | `sample.rs` |
+| `test_pythonformatter` | `sample.py` |
+| `test_rubyformatter` | `sample.rb` |
 
 Infra suites: `test_ast`, `test_benchmark`, `test_configbuilder`,
 `test_cstyle_formatter_base_core`, `test_formatter_visitor`,
