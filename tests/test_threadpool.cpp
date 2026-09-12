@@ -7,7 +7,7 @@
 #include "fmtpp/ThreadPool.hpp"
 #include "fmtpp/MemoryPool.hpp"
 
-extern MemoryPool* g_pool;
+extern thread_local MemoryPool* g_pool;
 
 static void writeFile(const char* path, const char* content)
 {
