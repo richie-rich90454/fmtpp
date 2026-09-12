@@ -1,7 +1,7 @@
 {
   "name": "fmtpp",
   "version": "0.1.0",
-  "description": "A professional code formatter for JS, TS, Java, C, C++, C#, Go, and Rust",
+  "description": "A professional code formatter for 25 languages, from JS to Zig to Vue",
   "main": "index.js",
   "bin": {
     "fmtpp": "./index.js"
@@ -19,7 +19,23 @@
     "cpp",
     "csharp",
     "go",
-    "rust"
+    "rust",
+    "kotlin",
+    "swift",
+    "dart",
+    "php",
+    "scala",
+    "objective-c",
+    "zig",
+    "d",
+    "groovy",
+    "solidity",
+    "vlang",
+    "glsl",
+    "html",
+    "css",
+    "json",
+    "vue"
   ],
   "author": "fmtpp contributors",
   "license": "MIT",
