@@ -30,6 +30,8 @@ class NamespaceNode;
 class PropertyNode;
 class RawTextNode;
 class HtmlElementNode;
+class WithNode;
+class SwitchCaseNode;
 
 /**
  * Static factory for creating AST nodes.
@@ -69,6 +71,8 @@ public:
     static PropertyNode* createPropertyNode();
     static RawTextNode* createRawTextNode();
     static HtmlElementNode* createHtmlElementNode();
+    static WithNode* createWithNode();
+    static SwitchCaseNode* createSwitchCaseNode();
 
 private:
     ASTNodeFactory();
