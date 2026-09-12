@@ -105,8 +105,38 @@ void RustFormatter::visitVariableDecl(VariableDeclNode& node)
         printNewline();
         return;
     }
-    printToken("let");
-    if (node.m_kind == "mut")
+    // ponytail: multi-word left sides we never modeled (pub static X) print
+    // verbatim instead of gaining an invented let
+    if (node.m_kind.empty() && node.m_name.find_first_of(" \t\n") != std::string::npos)
+    {
+        printToken(node.m_name.c_str());
+        if (!node.m_type.empty())
+        {
+            printToken(": ");
+            printToken(node.m_type.c_str());
+        }
+        if (node.m_initializer != NULL)
+        {
+            printToken(" = ");
+            node.m_initializer->accept(*this);
+        }
+        printToken(";");
+        printNewline();
+        return;
+    }
+    if (node.m_kind == "const")
+    {
+        printToken("const");
+    }
+    else if (node.m_kind == "static")
+    {
+        printToken("static");
+    }
+    else
+    {
+        printToken("let");
+    }
+    if (node.m_kind == "mut" || node.m_kind == "let mut" || node.m_kind == "var mut")
     {
         printSpace();
         printToken("mut");
@@ -167,10 +197,20 @@ void RustFormatter::visitForStmt(ForStmtNode& node)
     }
     printToken(node.m_keyword.empty() ? "for" : node.m_keyword.c_str());
     printSpace();
-    if (node.m_init != NULL) { node.m_init->accept(*this); }
-    if (node.m_condition != NULL)
+    // ponytail: for-in headers stay whole (pattern lives inside the
+    // condition); inventing " in " around a whole header duplicates it
+    // on every pass, so only split shapes print the separator
+    if (node.m_init != NULL)
     {
-        printToken(" in ");
+        node.m_init->accept(*this);
+        if (node.m_condition != NULL)
+        {
+            printToken(" in ");
+            node.m_condition->accept(*this);
+        }
+    }
+    else if (node.m_condition != NULL)
+    {
         node.m_condition->accept(*this);
     }
     if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
@@ -204,10 +244,20 @@ void RustFormatter::visitSwitchStmt(SwitchStmtNode& node)
     size_t cc = node.m_cases.size();
     for (size_t i = 0; i < cc; i++)
     {
+        // ponytail: RawText arms self-terminate, so print the token bare
+        // and own the comma+newline; comments print bare with no comma
         printIndent();
-        if (node.m_cases[i] != NULL) { node.m_cases[i]->accept(*this); }
-        printToken(",");
-        printNewline();
+        if (node.m_cases[i] != NULL && node.m_cases[i]->isRawText())
+        {
+            RawTextNode* raw = static_cast<RawTextNode*>(node.m_cases[i]);
+            printToken(raw->m_text.c_str());
+            printToken(",");
+            printNewline();
+        }
+        else if (node.m_cases[i] != NULL)
+        {
+            node.m_cases[i]->accept(*this);
+        }
     }
     dedent();
     printIndent();
