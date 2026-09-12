@@ -2,10 +2,52 @@
   "name": "fmtpp",
   "version": "0.1.0",
   "private": false,
+  "description": "a { professional } code formatter",
   "scripts": {
-    "format": "fmtpp format src/main.js"
+    "format": "fmtpp format src/main.js",
+    "test": "ctest --test-dir build",
+    "lint": "echo ok",
+    "build": "cmake --build build"
   },
   "dependencies": {
-    "react": "^19.0.0"
+    "react": "^19.0.0",
+    "next": "^15.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "config": {
+    "nested": {
+      "deep": [
+        1,
+        2,
+        { "k": "{v}" }
+      ]
+    },
+    "flags": [true, false, null]
+  },
+  "matrix": [
+    [1, 2],
+    [3, 4]
+  ],
+  "keywords": ["format", "cli", "multi-language"],
+  "author": "fmtpp team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://example.com/fmtpp.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": ["dist", "bin"],
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ],
+  "volta": {
+    "node": "20.11.0"
   }
 }
