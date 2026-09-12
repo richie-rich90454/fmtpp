@@ -28,6 +28,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 #include <cstdio>
 #include <vector>
 
@@ -115,6 +117,11 @@ void ASTPrinter::visitIfStmt(IfStmtNode& node)
     printIndent();
     printf("IfStmtNode\n");
     m_indentLevel++;
+    if (!node.m_keyword.empty())
+    {
+        printIndent();
+        printf("keyword: %s\n", node.m_keyword.c_str());
+    }
     if (node.m_condition != NULL)
     {
         node.m_condition->accept(*this);
@@ -139,6 +146,7 @@ void ASTPrinter::visitForStmt(ForStmtNode& node)
     if (node.m_condition != NULL) { node.m_condition->accept(*this); }
     if (node.m_update != NULL) { node.m_update->accept(*this); }
     if (node.m_body != NULL) { node.m_body->accept(*this); }
+    if (node.m_elseBlock != NULL) { node.m_elseBlock->accept(*this); }
     m_indentLevel--;
 }
 
@@ -149,6 +157,7 @@ void ASTPrinter::visitWhileStmt(WhileStmtNode& node)
     m_indentLevel++;
     if (node.m_condition != NULL) { node.m_condition->accept(*this); }
     if (node.m_body != NULL) { node.m_body->accept(*this); }
+    if (node.m_elseBlock != NULL) { node.m_elseBlock->accept(*this); }
     m_indentLevel--;
 }
 
@@ -215,6 +224,7 @@ void ASTPrinter::visitTryCatchStmt(TryCatchStmtNode& node)
     if (node.m_body != NULL) { node.m_body->accept(*this); }
     if (node.m_catchClause != NULL) { node.m_catchClause->accept(*this); }
     if (node.m_catchBody != NULL) { node.m_catchBody->accept(*this); }
+    if (node.m_elseBlock != NULL) { node.m_elseBlock->accept(*this); }
     {
         std::vector<ASTNode*>::size_type eci;
         for (eci = 0; eci < node.m_extraCatches.size(); eci++)
@@ -466,5 +476,25 @@ void ASTPrinter::visitHtmlElement(HtmlElementNode& node)
             if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
         }
     }
+    m_indentLevel--;
+}
+
+void ASTPrinter::visitWith(WithNode& node)
+{
+    printIndent();
+    printf("WithNode\n");
+    m_indentLevel++;
+    if (node.m_context != NULL) { node.m_context->accept(*this); }
+    if (node.m_body != NULL) { node.m_body->accept(*this); }
+    m_indentLevel--;
+}
+
+void ASTPrinter::visitSwitchCase(SwitchCaseNode& node)
+{
+    printIndent();
+    printf("SwitchCaseNode\n");
+    m_indentLevel++;
+    if (node.m_pattern != NULL) { node.m_pattern->accept(*this); }
+    if (node.m_body != NULL) { node.m_body->accept(*this); }
     m_indentLevel--;
 }
