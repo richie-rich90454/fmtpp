@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.28)
 project(fmtpp VERSION 0.1.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -12,20 +12,17 @@ if(FMTPP_SANITIZE_UB)
     add_link_options(-fsanitize=undefined)
 endif()
 
-# Third-party dependencies via FetchContent
+# Third-party dependencies.
+# CLI11 is header-only: vendored as bare headers under lib/cli11 (v2.7.2,
+# BSD-3-Clause, see lib/cli11/LICENSE). No FetchContent needed for it.
+add_library(cli11_headers INTERFACE)
+target_include_directories(cli11_headers INTERFACE ${CMAKE_SOURCE_DIR}/lib/cli11/include)
+add_library(CLI11::CLI11 ALIAS cli11_headers)
+
+# toml++ via FetchContent; the local mirror is used when network
+# FetchContent is unavailable (override with FETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS).
 include(FetchContent)
-
-# Local source mirrors are used when network FetchContent is unavailable;
-# set FETCHCONTENT_SOURCE_DIR_<NAME> to override with a different path.
-set(FETCHCONTENT_SOURCE_DIR_CLI11 ${CMAKE_SOURCE_DIR}/lib/cli11 CACHE PATH "CLI11 source directory")
 set(FETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS ${CMAKE_SOURCE_DIR}/lib/tomlplusplus CACHE PATH "toml++ source directory")
-
-FetchContent_Declare(
-    cli11
-    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
-    GIT_TAG v2.4.2
-)
-FetchContent_MakeAvailable(cli11)
 
 FetchContent_Declare(
     tomlplusplus
