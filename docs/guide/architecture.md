@@ -2,7 +2,7 @@
 
 ```
 SourceBuffer → Parser → AST → FormatterVisitor → OutputBuffer → stdout
-                              (one per language)     ↑
+                             (one per language)     ↑
 ThreadPool fans multi-file runs out; each job owns its buffer+parser.
 ```
 
@@ -16,16 +16,21 @@ ASTNode (abstract)
 │   LiteralNode, IdentifierNode, ArrayLiteralNode, ObjectLiteralNode,
 │   TemplateLiteralNode, ArrowFunctionNode, ClassDeclNode,
 │   InterfaceDeclNode, EnumDeclNode, TypeAliasNode, ImportDeclNode,
-│   ExportDeclNode, PreprocessorDirectiveNode, NamespaceNode, ...
+│   ExportDeclNode, PreprocessorDirectiveNode, NamespaceNode,
+│   PropertyNode, RawTextNode, HtmlElementNode
 │
 ASTVisitor
 ├── FormatterVisitor (abstract)
 │   ├── CstyleFormatterBase            <-- master class
-│   │   ├── JSFormatter → TSFormatter
-│   │   ├── JavaFormatter
-│   │   ├── CFormatter → CppFormatter
-│   │   └── CSharpFormatter
-│   ├── GoFormatter
+│   │   ├── JSFormatter → TSFormatter, SolidityFormatter
+│   │   ├── JavaFormatter → KotlinFormatter, ScalaFormatter, GroovyFormatter
+│   │   ├── CFormatter → CppFormatter, DartFormatter, DFormatter,
+│   │   │                GlslFormatter, ObjectiveCFormatter, PhpFormatter
+│   │   ├── CSharpFormatter
+│   │   ├── SwiftFormatter, ZigFormatter
+│   │   └── HtmlFormatter → VueFormatter
+│   │   └── CssFormatter
+│   ├── GoFormatter → VFormatter
 │   └── RustFormatter
 ├── StyleDetector   (fmtpp learn → .fmtpp.toml)
 └── ASTPrinter      (debug tree dumps)
@@ -35,17 +40,30 @@ ASTVisitor
 the node, `print*` pieces are virtual so subclasses override only what
 differs (`visitFunctionDecl`, `visitClassDecl`, …). Go/Rust extend
 `FormatterVisitor` directly (no semicolons, different blocks).
+`FormatterFactory` is the single home for extension→language mapping
+and formatter construction; CLI, thread pool and benchmark all use it.
+
+## The parser
+
+One shared engine with per-language profiles: comment/string/regex
+aware scanning, depth tracking, per-language keywords for declarations,
+imports, control flow and attributes. Leaf expressions stay verbatim
+and anything unrecognized becomes `RawTextNode`, so output is never
+invented. HTML/XML parse as tag trees, JSON with a strict mini-parser,
+Vue SFCs as HTML with per-block sub-formatting.
 
 ## Performance strategy
 
-- **`MemoryPool`** — one 10 MB bump-allocated chunk; all AST nodes come
-  from `ASTNodeFactory` via placement new. No per-node `new`/`delete`.
+- **`MemoryPool`** — one 10 MB bump-allocated chunk per thread
+  (`thread_local`); all AST nodes come from `ASTNodeFactory` via
+  placement new. No per-node `new`/`delete`.
 - **Zero-copy intent** — `SourceBuffer` mmaps/reads the file once and
-  outlives the AST (full tree-sitter integration pending, see below).
+  outlives the AST.
 - **`OutputBuffer`** — pre-reserved (`filesize × 1.2`) `realloc` buffer,
   `append`/`printf` via `vsnprintf`. No `std::string` concatenation.
 - **`ThreadPool`** — `hardware_concurrency()` workers, one file per task,
-  results collected in order via futures.
+  results collected in order via futures. Language is detected per
+  file, so mixed-extension runs format each file correctly.
 
 ## Resource rules (binding)
 
@@ -58,8 +76,8 @@ differs (`visitFunctionDecl`, `visitClassDecl`, …). Go/Rust extend
 
 ## Current status
 
-Formatters, config/learn/TUI, benchmark, thread pool and npm packaging
-are implemented and tested. `Parser` is a fallback stub returning a
-minimal AST — linking tree-sitter grammars (declared in `fmtpp.txt`
-Phase 2) is the pending item before CLI file formatting matches the
-unit-tested formatter output.
+A real parser for all 25 languages, all formatters, config load/merge,
+`learn` with source-text detection, TUI `config`, `bench`
+(+`--compare`), thread-pool multi-file runs and npm packaging with five
+prebuilt targets — implemented and tested (33 CTest suites plus npm
+packaging tests).
