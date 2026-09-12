@@ -24,6 +24,12 @@ public:
     virtual void accept(ASTVisitor& visitor) = 0;
 
     /**
+     * True for RawTextNode only. Lets formatters inline single text
+     * children without RTTI.
+     */
+    virtual bool isRawText() const { return false; }
+
+    /**
      * Allocates memory for an ASTNode subclass from the global MemoryPool.
      * @param size Number of bytes to allocate.
      * @return Pointer to allocated memory, or NULL if the pool is exhausted.
