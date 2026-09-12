@@ -17,6 +17,8 @@ public:
     virtual void visitFunctionDecl(FunctionDeclNode& node);
     virtual void visitClassDecl(ClassDeclNode& node);
     virtual void visitImportDecl(ImportDeclNode& node);
+    virtual void visitIfStmt(IfStmtNode& node);
+    virtual void visitWhileStmt(WhileStmtNode& node);
     virtual void visitForStmt(ForStmtNode& node);
     virtual void visitSwitchStmt(SwitchStmtNode& node);
 
