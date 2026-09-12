@@ -28,6 +28,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 #include <cstdio>
 
 // Easter egg: the Rust formatter awakens - ready to fight the borrow checker
@@ -666,6 +668,20 @@ void RustFormatter::visitHtmlElement(HtmlElementNode& node)
         if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
         if (i < cc - 1) { printNewline(); }
     }
+}
+
+void RustFormatter::visitWith(WithNode& node)
+{
+    if (node.m_context != NULL) { node.m_context->accept(*this); }
+    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    else { printNewline(); }
+}
+
+void RustFormatter::visitSwitchCase(SwitchCaseNode& node)
+{
+    if (node.m_pattern != NULL) { node.m_pattern->accept(*this); }
+    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    else { printNewline(); }
 }
 
 // Easter egg: RustFormatter complete - the borrow checker is satisfied... for now
