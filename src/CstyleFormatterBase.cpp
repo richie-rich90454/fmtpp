@@ -393,7 +393,16 @@ void CstyleFormatterBase::visitClassDecl(ClassDeclNode& node)
 }
 void CstyleFormatterBase::visitInterfaceDecl(InterfaceDeclNode& node)
 {
-    printToken("interface");
+    // ponytail: modifiers ride in the kind ("private interface"); bare and
+    // plain "interface" print the keyword, anything else prints verbatim
+    if (!node.m_kind.empty() && node.m_kind != "interface")
+    {
+        printToken(node.m_kind.c_str());
+    }
+    else
+    {
+        printToken("interface");
+    }
     printSpace();
     printToken(node.m_name.c_str());
     if (node.m_extends.size() > 0)
@@ -411,7 +420,16 @@ void CstyleFormatterBase::visitInterfaceDecl(InterfaceDeclNode& node)
 
 void CstyleFormatterBase::visitEnumDecl(EnumDeclNode& node)
 {
-    printToken("enum");
+    // ponytail: modifiers ride in the kind ("public enum"); bare and plain
+    // "enum" print the keyword, anything else prints verbatim
+    if (!node.m_kind.empty() && node.m_kind != "enum")
+    {
+        printToken(node.m_kind.c_str());
+    }
+    else
+    {
+        printToken("enum");
+    }
     printSpace();
     printToken(node.m_name.c_str());
     printOpeningBrace();
