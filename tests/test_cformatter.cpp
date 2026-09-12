@@ -251,6 +251,43 @@ int main()
         else { printf("Test 8 (comment): FAILED\n"); failed++; }
     }
 
+    // Test 9: C function uses return-type prefix, not the function keyword
+    {
+        OutputBuffer out(4096);
+        Config config;
+        CFormatter formatter(out, config);
+
+        ProgramNode* prog = ASTNodeFactory::createProgramNode();
+        FunctionDeclNode* func = ASTNodeFactory::createFunctionDeclNode();
+        func->m_name = "add";
+        func->m_returnType = "int";
+        IdentifierNode* paramA = ASTNodeFactory::createIdentifierNode();
+        paramA->m_name = "int a";
+        func->m_params.push_back(paramA);
+        IdentifierNode* paramB = ASTNodeFactory::createIdentifierNode();
+        paramB->m_name = "int b";
+        func->m_params.push_back(paramB);
+        BlockNode* body = ASTNodeFactory::createBlockNode();
+        ReturnStmtNode* ret = ASTNodeFactory::createReturnStmtNode();
+        IdentifierNode* retExpr = ASTNodeFactory::createIdentifierNode();
+        retExpr->m_name = "a";
+        ret->m_argument = retExpr;
+        body->m_statements.push_back(ret);
+        func->m_body = body;
+        prog->m_statements.push_back(func);
+
+        formatter.format(prog);
+
+        const char* result = out.getData();
+        printf("Test 9 output: [%s]\n", result);
+
+        bool ok = true;
+        if (strstr(result, "int add(int a, int b)") == NULL) { printf("  FAIL: missing 'int add(int a, int b)'\n"); ok = false; }
+        if (strstr(result, "function") != NULL) { printf("  FAIL: unexpected 'function' keyword\n"); ok = false; }
+        if (ok) { printf("Test 9 (function decl): PASSED\n"); passed++; }
+        else { printf("Test 9 (function decl): FAILED\n"); failed++; }
+    }
+
     printf("\n========================================\n");
     printf("CFormatter tests: %d passed, %d failed\n", passed, failed);
     printf("========================================\n");
