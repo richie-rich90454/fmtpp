@@ -20,4 +20,5 @@ public:
     virtual void visitImportDecl(ImportDeclNode& node);
     virtual void visitSwitchStmt(SwitchStmtNode& node);
     virtual void visitTryCatchStmt(TryCatchStmtNode& node);
+    virtual void visitNamespace(NamespaceNode& node);
 };
