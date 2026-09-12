@@ -1,0 +1,9 @@
+/* comment with { braces } inside */
+.tag::before {
+  content: "{ kept }";
+}
+
+.app {
+  color: red;
+  /* inner comment with } brace */
+}
