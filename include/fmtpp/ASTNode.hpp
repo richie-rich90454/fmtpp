@@ -30,6 +30,17 @@ public:
     virtual bool isRawText() const { return false; }
 
     /**
+     * True for BlockNode only. Lets suite printers accept any node
+     * and branch safely without RTTI.
+     */
+    virtual bool isBlock() const { return false; }
+
+    /**
+     * True for IfStmtNode only. Lets elif/elsif chains nest safely.
+     */
+    virtual bool isIfStmt() const { return false; }
+
+    /**
      * Allocates memory for an ASTNode subclass from the global MemoryPool.
      * @param size Number of bytes to allocate.
      * @return Pointer to allocated memory, or NULL if the pool is exhausted.
