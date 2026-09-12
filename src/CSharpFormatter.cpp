@@ -5,8 +5,25 @@
 #include "fmtpp/ast/InterfaceDeclNode.hpp"
 #include "fmtpp/ast/BlockNode.hpp"
 #include <cstdio>
+#include <cstring>
 
 // Easter egg: C# formatter - Microsoft's answer to Java, with extra sharpness and LINQ
+
+static bool startsWithWord(const std::string& text, const char* word)
+{
+    size_t n = strlen(word);
+    if (text.size() < n || text.compare(0, n, word) != 0) { return false; }
+    if (text.size() == n) { return true; }
+    char next = text[n];
+    return next != '_' && (next < 'a' || next > 'z') && (next < 'A' || next > 'Z')
+        && (next < '0' || next > '9');
+}
+
+static bool hasVisibility(const std::string& text)
+{
+    return startsWithWord(text, "public") || startsWithWord(text, "private")
+        || startsWithWord(text, "protected") || startsWithWord(text, "internal");
+}
 
 CSharpFormatter::CSharpFormatter(OutputBuffer& out, const Config& config)
     : CstyleFormatterBase(out, config)
@@ -19,10 +36,21 @@ CSharpFormatter::~CSharpFormatter()
 
 void CSharpFormatter::visitClassDecl(ClassDeclNode& node)
 {
-    // C# class: public class Name : BaseClass, IInterface { }
-    printToken("public");
-    printSpace();
-    printToken("class");
+    // C# class/struct: public class Name : BaseClass, IInterface { }
+    // (an explicit visibility in the kind wins instead of doubling up)
+    if (!hasVisibility(node.m_kind))
+    {
+        printToken("public");
+        printSpace();
+    }
+    if (node.m_kind.empty() || node.m_kind == "class")
+    {
+        printToken("class");
+    }
+    else
+    {
+        printToken(node.m_kind.c_str());
+    }
     printSpace();
     printToken(node.m_name.c_str());
     if (node.m_superClass != NULL || node.m_implements.size() > 0)
@@ -42,15 +70,23 @@ void CSharpFormatter::visitClassDecl(ClassDeclNode& node)
             first = false;
         }
     }
-    if (node.m_body != NULL) { printNewline(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
     else { printNewline(); }
 }
 
 void CSharpFormatter::visitFunctionDecl(FunctionDeclNode& node)
 {
-    // C# method: public ReturnType Name(params) { body }
-    printToken("public");
-    printSpace();
+    // C# method: public [modifiers] ReturnType Name(params) { body }
+    if (!hasVisibility(node.m_modifiers))
+    {
+        printToken("public");
+        printSpace();
+    }
+    if (!node.m_modifiers.empty())
+    {
+        printToken(node.m_modifiers.c_str());
+        printSpace();
+    }
     if (!node.m_returnType.empty())
     {
         printToken(node.m_returnType.c_str());
@@ -65,7 +101,7 @@ void CSharpFormatter::visitFunctionDecl(FunctionDeclNode& node)
         if (i < pc - 1) { printComma(); }
     }
     printToken(")");
-    if (node.m_body != NULL) { printNewline(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
 }
 
@@ -75,7 +111,7 @@ void CSharpFormatter::visitNamespace(NamespaceNode& node)
     printToken("namespace");
     printSpace();
     printToken(node.m_name.c_str());
-    if (node.m_body != NULL) { printNewline(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
     else { printNewline(); }
 }
 
@@ -97,7 +133,7 @@ void CSharpFormatter::visitInterfaceDecl(InterfaceDeclNode& node)
             if (i < ec - 1) { printComma(); }
         }
     }
-    if (node.m_body != NULL) { printNewline(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
     else { printNewline(); }
 }
 
