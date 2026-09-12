@@ -85,6 +85,11 @@ void GoFormatter::visitWith(WithNode& node)                   { visitWithNode(no
 void GoFormatter::visitSwitchCase(SwitchCaseNode& node)       { visitSwitchCaseNode(node); }
 // --- Helpers ---
 
+const char* GoFormatter::switchKeyword() const
+{
+    return "switch";
+}
+
 void GoFormatter::visitNode(ASTNode* node)
 {
     if (node != NULL) { node->accept(*this); }
@@ -285,7 +290,8 @@ void GoFormatter::visitWhileStmtNode(WhileStmtNode& node)
 
 void GoFormatter::visitSwitchStmtNode(SwitchStmtNode& node)
 {
-    printToken("switch");
+    // ponytail: select shares this printer (same arms, own keyword)
+    printToken(node.m_keyword.empty() ? "switch" : node.m_keyword.c_str());
     printSpace();
     if (node.m_discriminant != NULL) { node.m_discriminant->accept(*this); }
     printGoOpeningBrace();
