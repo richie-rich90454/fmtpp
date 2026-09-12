@@ -9,11 +9,12 @@ fmtpp <command> [options]
 
 | Command | Description |
 |---|---|
-| `fmtpp format <file...>` | Format one or more files |
+| `fmtpp format <file>` | Format one file, code to stdout (file untouched) |
+| `fmtpp format <file...>` | Format N files in parallel, prints a status report |
 | `fmtpp <file>` | Shorthand: format a single file |
 | `fmtpp bench <file> [--runs N] [--compare <tool>]` | Benchmark formatting (`oxfmt`, `prettier` as comparison) |
 | `fmtpp learn <file> [--output .fmtpp.toml]` | Detect style from a file, write config |
-| `fmtpp config` | Interactive TUI configurator |
+| `fmtpp config` | Interactive TUI configurator (needs a terminal) |
 
 ## Global flags
 
