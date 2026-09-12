@@ -8,6 +8,7 @@
 #include "fmtpp/Parser.hpp"
 #include "fmtpp/OutputBuffer.hpp"
 #include "fmtpp/Config.hpp"
+#include "fmtpp/ConfigBuilder.hpp"
 #include "fmtpp/JSFormatter.hpp"
 #include "fmtpp/TSFormatter.hpp"
 #include "fmtpp/JavaFormatter.hpp"
@@ -139,7 +140,7 @@ void FormatterApp::printUsage()
     printf("  bench FILE        Run performance benchmark\n");
     printf("  FILE              Format a single file\n");
     printf("\nSupported languages: js, ts, java, c, cpp, cs, go, rust\n");
-    printf("\nEaster egg: fmtpp - formatting code with style and zero leaks\n");
+    printf("\nfmtpp - formatting code with style and zero leaks\n");
 }
 
 void FormatterApp::printVersion()
@@ -190,7 +191,7 @@ int FormatterApp::runConfigurator()
     if (saved)
     {
         printf("Config saved to .fmtpp.toml\n");
-        printf("Easter egg: your formatting preferences have been recorded for posterity\n");
+        printf("Your formatting preferences have been recorded for posterity\n");
     }
     else
     {
@@ -218,18 +219,21 @@ int FormatterApp::runLearn(const std::string& sourceFile, const std::string& out
     }
 
     StyleDetector detector;
-    Config detected = detector.detect(ast);
+    // ponytail: detect from raw bytes; the stub parser cannot see style
+    Config detected = detector.detectFromSource(source.getData(), source.getSize());
 
     if (detector.writeConfig(outputFile.c_str()))
     {
         printf("Style detected and written to %s\n", outputFile.c_str());
         printf("Detected settings:\n");
         printf("  printWidth: %d\n", detected.printWidth);
+        printf("  tabWidth: %d\n", detected.tabWidth);
         printf("  useTabs: %s\n", detected.useTabs ? "true" : "false");
         printf("  semi: %s\n", detected.semi ? "true" : "false");
         printf("  singleQuote: %s\n", detected.singleQuote ? "true" : "false");
         printf("  braceStyle: %s\n", detected.braceStyle.c_str());
-        printf("Easter egg: the style detective has learned your secrets\n");
+        printf("  endOfLine: %s\n", detected.endOfLine.c_str());
+        printf("The style detective has learned your secrets\n");
     }
     else
     {
@@ -278,7 +282,7 @@ int FormatterApp::runFormat(const std::vector<std::string>& files)
     }
 
     printf("Done: %zu succeeded, %zu failed\n", successCount, failCount);
-    printf("Easter egg: the thread pool has done its parallel dance\n");
+    printf("The thread pool has done its parallel dance\n");
 
     return (failCount > 0) ? 1 : 0;
 }
@@ -308,7 +312,7 @@ int FormatterApp::runBenchmark(const std::vector<std::string>& files, int runs, 
     {
         printf("  Compare tool: %s\n", benchConfig.compareTool.c_str());
     }
-    printf("Easter egg: the benchmarker is warming up...\n");
+    printf("The benchmarker is warming up...\n");
 
     Benchmark bench;
     Benchmark::Result result = bench.run(benchConfig);
@@ -325,7 +329,7 @@ int FormatterApp::runBenchmark(const std::vector<std::string>& files, int runs, 
         {
             printf("Warning: Could not run comparison tool '%s'. Is it installed?\n",
                 benchConfig.compareTool.c_str());
-            printf("Easter egg: the comparison tool is playing hide and seek\n");
+            printf("The comparison tool is playing hide and seek\n");
         }
     }
 
@@ -350,7 +354,8 @@ int FormatterApp::runFormatSingle(const std::string& filepath)
     }
 
     std::string language = detectLanguage(filepath.c_str());
-    Config config;
+    // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
+    Config config = ConfigBuilder::buildForFile(filepath);
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
     FormatterVisitor* formatter = NULL;
 
