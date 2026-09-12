@@ -2,7 +2,7 @@
 
 ## C++ suites (CTest)
 
-18 suites, run from a configured build:
+33 suites, run from a configured build:
 
 ```sh
 cmake -S . -B build && cmake --build build --config Release
@@ -13,7 +13,7 @@ Targeted runs (from inside `build/`):
 
 ```sh
 ctest -R javaformatter --output-on-failure   # one suite only
-ctest -R "formatter"                         # all 8 formatter suites
+ctest -R "formatter"                         # all 23 formatter suites
 ./test_goformatter.exe                       # a suite binary directly
 ```
 
