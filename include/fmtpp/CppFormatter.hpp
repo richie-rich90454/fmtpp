@@ -3,9 +3,10 @@
 
 /**
  * C++ code formatter.
- * Extends CFormatter with C++-specific constructs:
- * classes with public/private/protected, namespaces,
- * templates, operator overloading, using/typedef.
+ * Extends CFormatter with C++-specific constructs: class/struct/union
+ * with bases, namespaces and return-type functions with modifiers.
+ * (Templates, using/typedef, operator overloads and lambdas are not
+ * modeled yet and pass through unstructured.)
  *
  * Easter egg: C++ - because sometimes you need more pluses
  */
