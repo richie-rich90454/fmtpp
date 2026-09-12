@@ -28,3 +28,27 @@ fn main() {
         else { println('other') }
     }
 }
+
+// extra helpers below
+interface Barker {
+    bark() string
+}
+
+fn total(xs []int) int {
+    mut sum := 0
+    for x in xs {
+        sum += x
+    }
+    for sum > 100 {
+        sum -= 100
+    }
+    return sum
+}
+
+// braces { } in comments stay put
+fn label(n int) string {
+    if n <= 0 {
+        return 'none'
+    }
+    return 'other'
+}
