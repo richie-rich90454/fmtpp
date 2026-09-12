@@ -26,6 +26,8 @@
 #include "fmtpp/ast/PreprocessorDirectiveNode.hpp"
 #include "fmtpp/ast/NamespaceNode.hpp"
 #include "fmtpp/ast/PropertyNode.hpp"
+#include "fmtpp/ast/RawTextNode.hpp"
+#include "fmtpp/ast/HtmlElementNode.hpp"
 #include <cstdio>
 
 // Easter egg: Go formatter born - simplicity is our middle name
@@ -75,7 +77,8 @@ void GoFormatter::visitExportDecl(ExportDeclNode& node)     { visitExportDeclNod
 void GoFormatter::visitPreprocessorDirective(PreprocessorDirectiveNode& node) { visitPreprocessorDirectiveNode(node); }
 void GoFormatter::visitNamespace(NamespaceNode& node)       { visitNamespaceNode(node); }
 void GoFormatter::visitProperty(PropertyNode& node)         { visitPropertyNode(node); }
-
+void GoFormatter::visitRawText(RawTextNode& node)             { visitRawTextNode(node); }
+void GoFormatter::visitHtmlElement(HtmlElementNode& node)     { visitHtmlElementNode(node); }
 // --- Helpers ---
 
 void GoFormatter::visitNode(ASTNode* node)
@@ -141,13 +144,31 @@ void GoFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
 void GoFormatter::visitVariableDeclNode(VariableDeclNode& node)
 {
     // Go short variable declaration: x := 42
-    // Or typed: var x int = 42
+    // Or typed: var x int = 42, const Pi = 3.14
+    // Unshaped leftovers (struct fields as raw text) print verbatim.
+    if (node.m_kind.empty() && node.m_initializer == NULL)
+    {
+        printToken(node.m_name.c_str());
+        printNewline();
+        return;
+    }
     if (node.m_kind == "let" || node.m_kind == "var")
     {
-        // Short variable declaration with :=
-        printToken(node.m_name.c_str());
-        printToken(" := ");
-        if (node.m_initializer != NULL) { node.m_initializer->accept(*this); }
+        if (node.m_initializer != NULL)
+        {
+            // Short variable declaration with :=
+            printToken(node.m_name.c_str());
+            printToken(" := ");
+            node.m_initializer->accept(*this);
+        }
+        else
+        {
+            // ponytail: `var x T` has no value, so := would be invalid
+            printToken("var");
+            printSpace();
+            printToken(node.m_name.c_str());
+            if (!node.m_type.empty()) { printSpace(); printToken(node.m_type.c_str()); }
+        }
     }
     else if (node.m_kind == "const")
     {
@@ -225,7 +246,7 @@ void GoFormatter::visitIfStmtNode(IfStmtNode& node)
 
 void GoFormatter::visitForStmtNode(ForStmtNode& node)
 {
-    printToken("for");
+    printToken(node.m_keyword.empty() ? "for" : node.m_keyword.c_str());
     printSpace();
     // Go for loop: for init; condition; update { }
     // Semicolons are used in for loop headers in Go
@@ -282,8 +303,12 @@ void GoFormatter::visitSwitchStmtNode(SwitchStmtNode& node)
 void GoFormatter::visitTryCatchStmtNode(TryCatchStmtNode& node)
 {
     // Go uses defer/recover instead of try/catch, but we map try to a function
-    printToken("// try");
-    printNewline();
+    // ponytail: extras (further catches) carry no try body, so no header
+    if (node.m_body != NULL)
+    {
+        printToken("// try");
+        printNewline();
+    }
     if (node.m_body != NULL)
     {
         printIndent();
@@ -300,6 +325,17 @@ void GoFormatter::visitTryCatchStmtNode(TryCatchStmtNode& node)
         printToken("// catch: ");
         node.m_catchClause->accept(*this);
         printNewline();
+    }
+    if (node.m_catchBody != NULL)
+    {
+        printIndent();
+        node.m_catchBody->accept(*this);
+        printNewline();
+    }
+    for (size_t eci = 0; eci < node.m_extraCatches.size(); eci++)
+    {
+        if (node.m_extraCatches[eci] == NULL) { continue; }
+        node.m_extraCatches[eci]->accept(*this);
     }
     if (node.m_finallyBlock != NULL)
     {
@@ -512,8 +548,8 @@ void GoFormatter::visitPreprocessorDirectiveNode(PreprocessorDirectiveNode& node
 
 void GoFormatter::visitNamespaceNode(NamespaceNode& node)
 {
-    // Go uses packages, not namespaces; map to package comment
-    printToken("// package");
+    // Go package clause, e.g. `package main`
+    printToken("package");
     printSpace();
     printToken(node.m_name.c_str());
     if (node.m_body != NULL) { printNewline(); node.m_body->accept(*this); }
@@ -535,6 +571,22 @@ void GoFormatter::visitThrowStmtNode(ThrowStmtNode& node)
     printToken(")");
     // Go: no semicolon
     printNewline();
+}
+
+void GoFormatter::visitRawTextNode(RawTextNode& node)
+{
+    printToken(node.m_text.c_str());
+    printNewline();
+}
+
+void GoFormatter::visitHtmlElementNode(HtmlElementNode& node)
+{
+    size_t cc = node.m_children.size();
+    for (size_t i = 0; i < cc; i++)
+    {
+        if (node.m_children[i] != NULL) { node.m_children[i]->accept(*this); }
+        if (i < cc - 1) { printNewline(); }
+    }
 }
 
 // Easter egg: Go formatter complete - where simplicity meets concurrency, and semicolons are ghosts
