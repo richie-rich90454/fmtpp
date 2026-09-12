@@ -1,5 +1,6 @@
 #pragma once
 #include "fmtpp/ASTNode.hpp"
+#include <string>
 #include <vector>
 
 class ASTVisitor;
@@ -22,6 +23,13 @@ public:
     /** @see ASTNode::accept */
     virtual void accept(ASTVisitor& visitor);
 
+    /** @see ASTNode::isBlock */
+    virtual bool isBlock() const { return true; }
+
     /** Statements within the block. */
     std::vector<ASTNode*> m_statements;
+
+    /** Kind: "" for brace/implicit suites, "do" for Ruby do-blocks
+        (standalone ones print their own closing end). */
+    std::string m_kind;
 };
