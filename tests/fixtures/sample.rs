@@ -47,3 +47,29 @@ fn main() -> i32 {
     let maybe: Option<i32> = None;
     return 0;
 }
+
+const LIMIT: i32 = 100;
+
+// Ratio helper with a loop and a comment { braces fine }.
+fn ratio(a: f64, b: f64) -> f64 {
+    if b == 0.0 {
+        return 0.0;
+    }
+    let mut q = a / b;
+    while q > LIMIT as f64 {
+        q = q - LIMIT as f64;
+    }
+    return q;
+}
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn add(&mut self, n: i32) {
+        for _ in 0..n {
+            self.value += 1;
+        }
+    }
+}
