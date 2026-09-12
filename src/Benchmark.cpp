@@ -387,17 +387,17 @@ void Benchmark::printReport(const Result& result)
     if (result.averageTimeMs < 12.0)
     {
         printf("  VERDICT: Beats Oxfmt (<12ms)! \n");
-        printf("  Easter egg: faster than a speeding bullet train\n");
+        printf("  Faster than a speeding bullet train\n");
     }
     else if (result.averageTimeMs < 50.0)
     {
         printf("  VERDICT: Good performance\n");
-        printf("  Easter egg: not quite lightning, but pretty fast\n");
+        printf("  Not quite lightning, but pretty fast\n");
     }
     else
     {
         printf("  VERDICT: Needs optimization\n");
-        printf("  Easter egg: even turtles can win races with determination\n");
+        printf("  Even turtles can win races with determination\n");
     }
 
     printf("  ========================================\n\n");
@@ -430,6 +430,6 @@ void Benchmark::printCompareReport(
     }
 
     printf("  ========================================\n");
-    printf("  Easter egg: may the fastest formatter win\n");
+    printf("  May the fastest formatter win\n");
     printf("  ========================================\n\n");
 }
