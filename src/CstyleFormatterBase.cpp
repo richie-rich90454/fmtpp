@@ -28,6 +28,8 @@
 #include "fmtpp/ast/PropertyNode.hpp"
 #include "fmtpp/ast/RawTextNode.hpp"
 #include "fmtpp/ast/HtmlElementNode.hpp"
+#include "fmtpp/ast/WithNode.hpp"
+#include "fmtpp/ast/SwitchCaseNode.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -567,6 +569,35 @@ void CstyleFormatterBase::visitHtmlElement(HtmlElementNode& node)
     printToken(node.m_tag.c_str());
     printToken(">");
     printNewline();
+}
+
+void CstyleFormatterBase::visitWith(WithNode& node)
+{
+    // ponytail: JS-shaped fallback; only PythonFormatter prints real with
+    if (!node.m_keyword.empty())
+    {
+        printToken(node.m_keyword.c_str());
+    }
+    else
+    {
+        printToken("with");
+    }
+    if (node.m_context != NULL)
+    {
+        printSpace();
+        printToken("(");
+        node.m_context->accept(*this);
+        printToken(")");
+    }
+    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    else { printNewline(); }
+}
+
+void CstyleFormatterBase::visitSwitchCase(SwitchCaseNode& node)
+{
+    if (node.m_pattern != NULL) { node.m_pattern->accept(*this); }
+    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    else { printNewline(); }
 }
 
 // Easter egg: 800 lines of pure formatting glory - complete! The master formatter stands ready.
