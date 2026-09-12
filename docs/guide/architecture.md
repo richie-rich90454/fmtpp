@@ -76,8 +76,8 @@ Vue SFCs as HTML with per-block sub-formatting.
 
 ## Current status
 
-A real parser for all 25 languages, all formatters, config load/merge,
+A real parser for all 26 languages, all formatters, config load/merge,
 `learn` with source-text detection, TUI `config`, `bench`
 (+`--compare`), thread-pool multi-file runs and npm packaging with five
-prebuilt targets — implemented and tested (33 CTest suites plus npm
+prebuilt targets — implemented and tested (35 CTest suites plus npm
 packaging tests).
