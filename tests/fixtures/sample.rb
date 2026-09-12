@@ -38,3 +38,27 @@ if __FILE__ == $PROGRAM_NAME
   dog = Dog.new("Rex", 3)
   puts dog.bark(2)
 end
+
+# geometry helpers below
+def area(width, height = 1)
+  total = 0
+  height.times do
+    total = total + width
+  end
+  while total > 100
+    total = total - 100
+  end
+  total
+end
+
+class Counter
+  # braces { } in comments stay put
+  def initialize
+    @value = 0
+  end
+
+  def add(n)
+    return @value if n <= 0
+    @value = @value + n
+  end
+end
