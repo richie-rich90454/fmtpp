@@ -1,0 +1,16 @@
+/* nested media stress */
+@media screen {
+  .l1 {
+    color: red;
+  }
+  @media (min-width: 100px) {
+    .l2 {
+      color: blue;
+    }
+    @media print {
+      .l3 {
+        color: black;
+      }
+    }
+  }
+}
