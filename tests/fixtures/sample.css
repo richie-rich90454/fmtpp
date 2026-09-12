@@ -1,0 +1,16 @@
+@import "reset.css";
+
+.app {
+  color: red;
+  margin: 0 auto;
+}
+
+a:hover, .menu > li {
+  text-decoration: none !important;
+}
+
+@media screen {
+  .app {
+    width: 100%;
+  }
+}
