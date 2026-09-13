@@ -92,13 +92,30 @@ void VueFormatter::visitHtmlElement(HtmlElementNode& node)
 
     printToken("<");
     printToken(node.m_tag.c_str());
-    for (size_t i = 0; i < node.m_attrs.size(); i++)
+    if (m_config.singleAttributePerLine && node.m_attrs.size() > 1)
     {
-        printSpace();
-        printToken(node.m_attrs[i].c_str());
+        indent();
+        for (size_t i = 0; i < node.m_attrs.size(); i++)
+        {
+            printNewline();
+            printIndent();
+            printToken(node.m_attrs[i].c_str());
+        }
+        dedent();
+        printNewline();
+        printIndent();
+    }
+    else
+    {
+        for (size_t i = 0; i < node.m_attrs.size(); i++)
+        {
+            printSpace();
+            printToken(node.m_attrs[i].c_str());
+        }
     }
     printToken(">");
     printNewline();
+    if (m_config.vueIndentScriptAndStyle) { indent(); }
     indent();
     std::string language = "js";
     if (isScript)
@@ -115,7 +132,16 @@ void VueFormatter::visitHtmlElement(HtmlElementNode& node)
         if (node.m_children[i] != NULL && node.m_children[i]->isRawText())
         {
             RawTextNode* text = static_cast<RawTextNode*>(node.m_children[i]);
-            formatInner(text->m_text, language);
+            if (m_config.embeddedLanguageFormatting == "off")
+            {
+                printIndent();
+                printToken(text->m_text.c_str());
+                printNewline();
+            }
+            else
+            {
+                formatInner(text->m_text, language);
+            }
         }
         else if (node.m_children[i] != NULL)
         {
@@ -124,6 +150,7 @@ void VueFormatter::visitHtmlElement(HtmlElementNode& node)
             printNewline();
         }
     }
+    if (m_config.vueIndentScriptAndStyle) { dedent(); }
     dedent();
     printIndent();
     printToken("</");
