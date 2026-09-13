@@ -17,6 +17,10 @@
 #include <cstdlib>
 #include <ctime>
 #include <cstring>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 FormatterApp::FormatterApp()
     : m_programName("fmtpp")
@@ -180,7 +184,10 @@ void FormatterApp::printUnicorn()
 
 int FormatterApp::runConfigurator()
 {
-    Config config;
+    // ponytail: start from the existing file so TUI round-trips never
+    // drop keys it has no widget for (or any hand edits); missing file
+    // still yields defaults
+    Config config = ConfigBuilder::buildFromFile(".fmtpp.toml");
     TuiConfigurator tui;
     bool saved = tui.run(config);
 
@@ -229,6 +236,17 @@ int FormatterApp::runLearn(const std::string& sourceFile, const std::string& out
         printf("  singleQuote: %s\n", detected.singleQuote ? "true" : "false");
         printf("  braceStyle: %s\n", detected.braceStyle.c_str());
         printf("  endOfLine: %s\n", detected.endOfLine.c_str());
+        printf("  trailingComma: %s\n", detected.trailingComma.c_str());
+        printf("  bracketSpacing: %s\n", detected.bracketSpacing ? "true" : "false");
+        printf("  arrowParens: %s\n", detected.arrowParens.c_str());
+        printf("  spaceAfterComma: %s\n", detected.spaceAfterComma ? "true" : "false");
+        printf("  spaceAfterColon: %s\n", detected.spaceAfterColon ? "true" : "false");
+        printf("  spaceBeforeBrace: %s\n", detected.spaceBeforeBrace ? "true" : "false");
+        printf("  spaceAfterKeyword: %s\n", detected.spaceAfterKeyword ? "true" : "false");
+        printf("  spaceAroundAssignment: %s\n", detected.spaceAroundAssignment ? "true" : "false");
+        printf("  catchOnNewLine: %s\n", detected.catchOnNewLine.c_str());
+        printf("  maxBlankLines: %d\n", detected.maxBlankLines);
+        printf("  finalNewline: %s\n", detected.finalNewline ? "true" : "false");
         printf("The style detective has learned your secrets\n");
     }
     else
@@ -341,8 +359,15 @@ int FormatterApp::runFormatSingle(const std::string& filepath)
         return 1;
     }
 
+    // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
+    Config config = ConfigBuilder::buildForFile(filepath);
+    std::string language = FormatterFactory::detectLanguageForFile(filepath.c_str(), config);
+    ConfigBuilder::applyLanguageOverrides(config, language);
+    if (config.endOfLine == "auto" && memchr(source.getData(), '\r', source.getSize()) != NULL)
+    {
+        config.endOfLine = "crlf";
+    }
     Parser parser;
-    std::string language = FormatterFactory::detectLanguage(filepath.c_str());
     ProgramNode* ast = parser.parse(source, language);
     if (ast == NULL)
     {
@@ -350,15 +375,20 @@ int FormatterApp::runFormatSingle(const std::string& filepath)
         return 1;
     }
 
-    // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
-    Config config = ConfigBuilder::buildForFile(filepath);
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
     FormatterVisitor* formatter = FormatterFactory::create(language, out, config);
 
     if (formatter != NULL)
     {
         formatter->format(ast);
-        printf("%s", out.toString().c_str());
+        std::string text = formatter->applyEndOfLine(out.toString());
+#ifdef _WIN32
+        // ponytail: stdout is text mode by default, which rewrites every
+        // '\n' into "\r\n" — after endOfLine conversion that doubles the
+        // carriage returns ("\r\r\n"). Binary mode passes bytes through.
+        _setmode(_fileno(stdout), _O_BINARY);
+#endif
+        printf("%s", text.c_str());
         delete formatter;
         return 0;
     }
@@ -368,5 +398,7 @@ int FormatterApp::runFormatSingle(const std::string& filepath)
 
 std::string FormatterApp::detectLanguage(const char* filepath)
 {
-    return FormatterFactory::detectLanguage(filepath);
+    if (filepath == NULL) { return "js"; }
+    Config config = ConfigBuilder::buildForFile(filepath);
+    return FormatterFactory::detectLanguageForFile(filepath, config);
 }
