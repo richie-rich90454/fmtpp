@@ -21,6 +21,9 @@ public:
     /** @see ASTNode::accept */
     virtual void accept(ASTVisitor& visitor);
 
+    /** @see ASTNode::isImportDirective */
+    virtual bool isImportDirective() const { return true; }
+
     /** Source module path. */
     std::string m_source;
 
