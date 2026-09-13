@@ -168,6 +168,17 @@ with the original snippet, the first output, and the second output.
 ctest --test-dir build --output-on-failure
 ```
 
+## Blank lines and brace placement move
+
+They shouldn't, beyond one blank per gap. fmtpp preserves input blank
+lines (up to `maxBlankLines`) and preserves Allman `catch`/`else`/
+`finally` placement (`} catch` stays split when the source splits it).
+Set `preserveBlankLines = false` for fully compact output, or
+`catchOnNewLine`/`elseOnNewLine`/`finallyOnNewLine` to `"always"` or
+`"never"` to force one style. C++ functions default to Allman and C#
+to Allman; override with `braceStyleFunctions = "same-line". See
+[Configuration](./configuration.md) for the full option list.
+
 ## Empty and comments-only files
 
 Empty files stay empty. Comments-only files keep their comments and
