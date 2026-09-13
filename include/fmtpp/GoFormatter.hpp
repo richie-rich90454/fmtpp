@@ -60,6 +60,13 @@ protected:
     /** Switch keyword ("switch", "match" in V) */
     virtual const char* switchKeyword() const;
 
+    /**
+     * True when switch arm bodies indent one level deeper than the
+     * arm labels (gofmt). False for V match arms, which print whole
+     * arms at one level.
+     */
+    virtual bool switchArmBodyExtraIndent() const;
+
     /** Print a closing brace */
     void printGoClosingBrace();
 
