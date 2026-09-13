@@ -20,4 +20,8 @@ public:
     virtual void visitFunctionDecl(FunctionDeclNode& node);
     virtual void visitNamespace(NamespaceNode& node);
     virtual void visitInterfaceDecl(InterfaceDeclNode& node);
+
+protected:
+    virtual bool defaultFunctionBraceSameLine() const;
+    virtual bool defaultTypeBraceSameLine() const;
 };
