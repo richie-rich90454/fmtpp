@@ -39,5 +39,17 @@ public:
     /** Optional finally block. */
     ASTNode* m_finallyBlock;
 
+    /**
+     * True when `catch` started on its own line (Allman style:
+     * `}` newline `catch`). Printers join it with a space otherwise.
+     */
+    bool m_catchOnNewLine = false;
+
+    /**
+     * True when `finally` started on its own line. Printers join it
+     * with a space otherwise.
+     */
+    bool m_finallyOnNewLine = false;
+
     // Easter egg: try { life(); } catch (Reality& r) { laugh(); } finally { nap(); }
 };
