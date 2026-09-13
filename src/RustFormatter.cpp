@@ -58,6 +58,7 @@ void RustFormatter::visitProgram(ProgramNode& node)
     size_t count = node.m_statements.size();
     for (size_t i = 0; i < count; i++)
     {
+        printStatementBlanks(node.m_statements, i);
         if (node.m_statements[i] != NULL) { node.m_statements[i]->accept(*this); }
         if (i < count - 1) { printNewline(); }
     }
@@ -112,12 +113,13 @@ void RustFormatter::visitVariableDecl(VariableDeclNode& node)
         printToken(node.m_name.c_str());
         if (!node.m_type.empty())
         {
-            printToken(": ");
+            printToken(":");
+            if (m_config.spaceAfterColon) { printSpace(); }
             printToken(node.m_type.c_str());
         }
         if (node.m_initializer != NULL)
         {
-            printToken(" = ");
+            printAssign();
             node.m_initializer->accept(*this);
         }
         printToken(";");
@@ -145,12 +147,13 @@ void RustFormatter::visitVariableDecl(VariableDeclNode& node)
     printToken(node.m_name.c_str());
     if (!node.m_type.empty())
     {
-        printToken(": ");
+        printToken(":");
+        if (m_config.spaceAfterColon) { printSpace(); }
         printToken(node.m_type.c_str());
     }
     if (node.m_initializer != NULL)
     {
-        printToken(" = ");
+        printAssign();
         node.m_initializer->accept(*this);
     }
     printToken(";");
@@ -270,12 +273,19 @@ void RustFormatter::visitSwitchStmt(SwitchStmtNode& node)
 // ================================================================
 void RustFormatter::visitBlock(BlockNode& node)
 {
+    if (node.m_statements.empty() && m_config.emptyBlockSameLine)
+    {
+        printToken("{}");
+        printNewline();
+        return;
+    }
     printToken("{");
     printNewline();
     indent();
     size_t sc = node.m_statements.size();
     for (size_t i = 0; i < sc; i++)
     {
+        printStatementBlanks(node.m_statements, i);
         printIndent();
         if (node.m_statements[i] != NULL) { node.m_statements[i]->accept(*this); }
         if (i < sc - 1) { printNewline(); }
@@ -378,7 +388,8 @@ void RustFormatter::visitLiteral(LiteralNode& node)
     switch (node.m_type)
     {
     case LiteralNode::TYPE_STRING:
-        if (m_config.singleQuote)
+        if (m_config.singleQuote
+            && (!m_config.quoteAvoidEscape || node.m_value.find('\'') == std::string::npos))
         {
             m_out.printf("'%s'", node.m_value.c_str());
         }
@@ -418,12 +429,14 @@ void RustFormatter::visitIdentifier(IdentifierNode& node)
 void RustFormatter::visitArrayLiteral(ArrayLiteralNode& node)
 {
     printToken("vec![");
+    if (m_config.spaceInBrackets && node.m_elements.size() > 0) { printSpace(); }
     size_t ec = node.m_elements.size();
     for (size_t i = 0; i < ec; i++)
     {
         if (node.m_elements[i] != NULL) { node.m_elements[i]->accept(*this); }
         if (i < ec - 1) { printComma(); }
     }
+    if (m_config.spaceInBrackets && node.m_elements.size() > 0) { printSpace(); }
     printToken("]");
 }
 
@@ -605,7 +618,7 @@ void RustFormatter::visitTypeAlias(TypeAliasNode& node)
     printToken("type");
     printSpace();
     printToken(node.m_name.c_str());
-    printToken(" = ");
+    printAssign();
     if (node.m_typeAnnotation != NULL) { node.m_typeAnnotation->accept(*this); }
     printToken(";");
     printNewline();
