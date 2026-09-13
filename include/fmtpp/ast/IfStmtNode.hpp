@@ -28,7 +28,7 @@ public:
     /** Condition expression. */
     ASTNode* m_condition;
 
-    /** Keyword: "if" (default when empty) or "unless". */
+    /** Keyword: "if" (default when empty), "unless", or "elseif". */
     std::string m_keyword;
 
     /** Then-branch (BlockNode or statement). */
@@ -36,4 +36,10 @@ public:
 
     /** Optional else-branch (BlockNode or IfStmtNode). */
     ASTNode* m_elseBranch;
+
+    /**
+     * True when `else` started on its own line (Allman style:
+     * `}` newline `else`). Printers join it with a space otherwise.
+     */
+    bool m_elseOnNewLine = false;
 };
