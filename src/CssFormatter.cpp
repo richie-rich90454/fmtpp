@@ -29,7 +29,8 @@ void CssFormatter::visitProperty(PropertyNode& node)
 {
     // CSS declaration: prop: value;
     if (node.m_key != NULL) { node.m_key->accept(*this); }
-    printToken(": ");
+    printToken(":");
+    if (m_config.spaceAfterColon) { printSpace(); }
     if (node.m_value != NULL) { node.m_value->accept(*this); }
     printToken(";");
     printNewline();
