@@ -8,6 +8,7 @@
 #include "fmtpp/FormatterFactory.hpp"
 #include "fmtpp/FormatterVisitor.hpp"
 #include <cstdio>
+#include <cstring>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -106,11 +107,18 @@ std::string ThreadPool::formatFile(const std::string& filepath, const std::strin
     }
 
     Parser parser;
+    // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
+    Config config = ConfigBuilder::buildForFile(filepath);
     // ponytail: detect per file so mixed-extension runs format each correctly
-    std::string fileLanguage = FormatterFactory::detectLanguage(filepath.c_str());
+    std::string fileLanguage = FormatterFactory::detectLanguageForFile(filepath.c_str(), config);
     if (fileLanguage == "js" && language != "js" && language != "javascript")
     {
         fileLanguage = language;
+    }
+    ConfigBuilder::applyLanguageOverrides(config, fileLanguage);
+    if (config.endOfLine == "auto" && memchr(source.getData(), '\r', source.getSize()) != NULL)
+    {
+        config.endOfLine = "crlf";
     }
     ProgramNode* ast = parser.parse(source, fileLanguage);
     if (ast == NULL)
@@ -118,15 +126,13 @@ std::string ThreadPool::formatFile(const std::string& filepath, const std::strin
         return std::string();
     }
 
-    // ponytail: .fmtpp.toml next to the file wins; defaults when missing or broken
-    Config config = ConfigBuilder::buildForFile(filepath);
     OutputBuffer out(static_cast<size_t>(source.getSize()) * 2);
     FormatterVisitor* formatter = FormatterFactory::create(fileLanguage, out, config);
 
     if (formatter != NULL)
     {
         formatter->format(ast);
-        std::string result = out.toString();
+        std::string result = formatter->applyEndOfLine(out.toString());
         delete formatter;
         return result;
     }
