@@ -27,15 +27,18 @@ void CFormatter::visitFunctionDecl(FunctionDeclNode& node)
         printSpace();
     }
     printToken(node.m_name.c_str());
+    if (m_config.spaceBeforeFunctionParen) { printSpace(); }
     printToken("(");
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     size_t pc = node.m_params.size();
     for (size_t i = 0; i < pc; i++)
     {
         if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
         if (i < pc - 1) { printComma(); }
     }
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     printToken(")");
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printFunctionBraceGap(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
 }
 
