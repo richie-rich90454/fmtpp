@@ -3,6 +3,7 @@
 #include "fmtpp/ASTVisitor.hpp"
 #include "fmtpp/OutputBuffer.hpp"
 #include "fmtpp/Config.hpp"
+#include <vector>
 
 /**
  * Base formatter visitor that provides formatting primitives.
@@ -19,12 +20,27 @@ public:
 
     virtual void format(ASTNode* root) = 0;
 
+    /**
+     * Convert a line-feed buffer to the configured endOfLine for output
+     * (lf/auto keep newlines, crlf uses carriage pairs, cr uses bare
+     * carriage returns). Applied once at the CLI edge, never in tests.
+     */
+    std::string applyEndOfLine(const std::string& text) const;
+
 protected:
     /** Print indentation based on current indent level */
     void printIndent();
 
     /** Print a newline and reset column counter */
     void printNewline();
+
+    /**
+     * Ensure `blanks` blank lines (buffer ends with blanks+1 newlines).
+     * Re-emits input separators stamped as m_blankLinesBefore and backs
+     * the blank-line options. Capped by maxBlankLines, never leads the
+     * output, never stacks beyond the cap.
+     */
+    void printBlankLine(int blanks);
 
     /** Print a single space */
     void printSpace();
@@ -38,8 +54,22 @@ protected:
     /** Print a semicolon if semicolons are enabled */
     void printSemicolon();
 
+    /** Print `=` with optional surrounding spaces */
+    void printAssign();
+
+    /** Print `:=` with optional surrounding spaces */
+    void printShortAssign();
+
     /** Increase indentation level by one */
     void indent();
+
+    /**
+     * Emit blank separators before statement `stmts[i]`: preserved input
+     * gaps (m_blankLinesBefore, capped by maxBlankLines), a blank after
+     * a trailing import block, and a blank before returns, each gated
+     * by its own option. No-ops stay silent, so loops call it blindly.
+     */
+    void printStatementBlanks(const std::vector<ASTNode*>& stmts, size_t i);
 
     /** Decrease indentation level by one (clamped at 0) */
     void dedent();
