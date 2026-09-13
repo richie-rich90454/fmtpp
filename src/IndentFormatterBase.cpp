@@ -53,9 +53,15 @@ void IndentFormatterBase::format(ASTNode* root)
 void IndentFormatterBase::visitProgram(ProgramNode& node)
 {
     size_t count = node.m_statements.size();
+    int wantDefs = m_config.blankLinesAroundTopLevelDefs;
     for (size_t i = 0; i < count; i++)
     {
-        if (node.m_statements[i] != NULL) { node.m_statements[i]->accept(*this); }
+        ASTNode* stmt = node.m_statements[i];
+        ASTNode* prev = (i > 0) ? node.m_statements[i - 1] : NULL;
+        bool isDef = stmt != NULL && (stmt->isFunctionDecl() || stmt->isClassDecl());
+        bool prevDef = prev != NULL && (prev->isFunctionDecl() || prev->isClassDecl());
+        if (wantDefs > 0 && i > 0 && (isDef || prevDef)) { printBlankLine(wantDefs); }
+        if (stmt != NULL) { stmt->accept(*this); }
         if (i < count - 1) { printNewline(); }
     }
 }
@@ -146,7 +152,7 @@ void IndentFormatterBase::visitVariableDecl(VariableDeclNode& node)
     }
     if (node.m_initializer != NULL)
     {
-        printToken(" = ");
+        printAssign();
         node.m_initializer->accept(*this);
     }
     printNewline();
@@ -323,12 +329,14 @@ void IndentFormatterBase::visitIdentifier(IdentifierNode& node)
 void IndentFormatterBase::visitArrayLiteral(ArrayLiteralNode& node)
 {
     printToken("[");
+    if (m_config.spaceInBrackets && node.m_elements.size() > 0) { printSpace(); }
     size_t ec = node.m_elements.size();
     for (size_t i = 0; i < ec; i++)
     {
         if (node.m_elements[i] != NULL) { node.m_elements[i]->accept(*this); }
         if (i < ec - 1) { printComma(); }
     }
+    if (m_config.spaceInBrackets && node.m_elements.size() > 0) { printSpace(); }
     printToken("]");
 }
 
@@ -413,7 +421,7 @@ void IndentFormatterBase::visitTypeAlias(TypeAliasNode& node)
     printToken(node.m_name.c_str());
     if (node.m_typeAnnotation != NULL)
     {
-        printToken(" = ");
+        printAssign();
         node.m_typeAnnotation->accept(*this);
     }
     printNewline();
