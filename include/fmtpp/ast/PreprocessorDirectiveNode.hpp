@@ -20,6 +20,9 @@ public:
     /** @see ASTNode::accept */
     virtual void accept(ASTVisitor& visitor);
 
+    /** @see ASTNode::isImportDirective */
+    virtual bool isImportDirective() const { return true; }
+
     /** Directive string (e.g., "#define FOO 42"). */
     std::string m_directive;
 
