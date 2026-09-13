@@ -72,6 +72,27 @@ protected:
     /** Whether a semicolon is required after this node */
     virtual bool requiresSemicolon(ASTNode* node) const;
 
+    /** House default for function braces (same-line), before options */
+    virtual bool defaultFunctionBraceSameLine() const;
+
+    /** House default for type braces (same-line), before options */
+    virtual bool defaultTypeBraceSameLine() const;
+
+    /** Resolved function brace placement honoring braceStyleFunctions */
+    bool functionBraceSameLine() const;
+
+    /** Resolved type brace placement honoring braceStyleTypes */
+    bool typeBraceSameLine() const;
+
+    /** Print the gap between a function header and its body */
+    void printFunctionBraceGap();
+
+    /** Print the gap between a type header and its body */
+    void printTypeBraceGap();
+
+    /** Print the gap between a control header and its body (braceStyle) */
+    void printBlockBraceGap();
+
     /** Print an opening brace with optional preceding space */
     void printOpeningBrace();
 
