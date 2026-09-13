@@ -72,7 +72,7 @@ int main(){
     // printSpace dedup, printComma, printNewline idempotency
     { OutputBuffer o(256); Config c; ProbeFormatter p(o,c); p.printToken("a"); p.printSpace(); p.printSpace(); p.printSpace(); p.printToken("b"); CHECK(strstr(o.getData(),"a b")!=NULL,"space dedup"); CHECK(strstr(o.getData(),"a  b")==NULL,"no double"); printf("Space dedup: PASSED\n"); }
     { OutputBuffer o(256); Config c; ProbeFormatter p(o,c); p.printToken("a"); p.printComma(); p.printToken("b"); CHECK(strstr(o.getData(),"a, b")!=NULL,"comma"); printf("Comma: PASSED\n"); }
-    { OutputBuffer o(256); Config c; ProbeFormatter p(o,c); p.printNewline(); p.printNewline(); p.printNewline(); CHECK(o.getSize()==3,"newlines"); printf("Newlines: PASSED\n"); }
+    { OutputBuffer o(256); Config c; ProbeFormatter p(o,c); p.printNewline(); p.printNewline(); p.printNewline(); CHECK(o.getSize()==1,"newlines collapse"); p.printToken("a"); p.printNewline(); p.printNewline(); CHECK(strcmp(o.getData(),"\na\n")==0,"newline after token"); printf("Newlines: PASSED\n"); }
     // reset/reuse: clear buffer and reformat
     { OutputBuffer o(256); Config c; TestFormatter f(o,c); f.format(NULL); size_t s1=o.getSize(); o.clear(); CHECK(o.getSize()==0,"clear"); f.format(NULL); CHECK(o.getSize()==s1,"reformat same"); printf("Reuse: PASSED\n"); }
     // idempotency: format twice without clear appends (documents behavior, just no crash)
