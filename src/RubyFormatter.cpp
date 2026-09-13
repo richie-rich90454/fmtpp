@@ -52,7 +52,7 @@ void RubyFormatter::visitFunctionDecl(FunctionDeclNode& node)
         BlockNode* suite = static_cast<BlockNode*>(node.m_body);
         if (!suite->m_statements.empty() && suite->m_statements[0] != NULL)
         {
-            printToken(" = ");
+            printAssign();
             suite->m_statements[0]->accept(*this);
             return;
         }
