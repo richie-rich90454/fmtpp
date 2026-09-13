@@ -33,5 +33,18 @@ public:
      */
     static Config buildForFile(const std::string& filepath);
 
+    /**
+     * Applies one raw string value (from a [language.*] table) to a key.
+     * Unknown keys are ignored; ints are clamped like the TOML path.
+     */
+    static void applyStringValue(Config& config, const std::string& key,
+        const std::string& value);
+
+    /**
+     * Merges the [language.<name>] override table into config in place.
+     * No-op when the language has no table.
+     */
+    static void applyLanguageOverrides(Config& config, const std::string& language);
+
     // Easter egg: building configs, one TOML at a time
 };
