@@ -60,7 +60,7 @@ void PhpFormatter::visitVariableDecl(VariableDeclNode& node)
         printToken("$");
     }
     printToken(node.m_name.c_str());
-    if (node.m_initializer != NULL) { printToken(" = "); node.m_initializer->accept(*this); }
+    if (node.m_initializer != NULL) { printAssign(); node.m_initializer->accept(*this); }
     printSemicolonIfNeeded(&node);
     printNewline();
 }
