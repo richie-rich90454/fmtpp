@@ -27,6 +27,7 @@
 #include "fmtpp/VueFormatter.hpp"
 #include "fmtpp/PythonFormatter.hpp"
 #include "fmtpp/RubyFormatter.hpp"
+#include <cstdio>
 #include <cstring>
 
 // Easter egg: one factory to format them all, one factory to indent them
@@ -169,6 +170,87 @@ std::string FormatterFactory::detectLanguage(const char* filepath)
     }
 
     return "js";
+}
+
+namespace {
+// Only these extensions genuinely mean JavaScript; anything else that
+// resolves to "js" came from the unknown-extension fallback.
+bool isJsExtension(const char* filepath)
+{
+    if (filepath == NULL) { return false; }
+    const char* dot = strrchr(filepath, '.');
+    if (dot == NULL) { return false; }
+    const char* ext = dot + 1;
+    return strcmp(ext, "js") == 0 || strcmp(ext, "mjs") == 0
+        || strcmp(ext, "cjs") == 0 || strcmp(ext, "jsx") == 0;
+}
+
+// "#!/usr/bin/env python3 -u" -> "python"; "#!node" -> "node";
+// "/bin/sh" -> "sh".
+std::string shebangInterpreter(const char* line, size_t len)
+{
+    size_t i = 2;
+    while (i < len && (line[i] == ' ' || line[i] == '\t')) { i++; }
+    size_t start = i;
+    while (i < len && line[i] != ' ' && line[i] != '\t'
+        && line[i] != '\n' && line[i] != '\r' && line[i] != '\0') { i++; }
+    std::string path(line + start, i - start);
+    size_t slash = path.find_last_of('/');
+    std::string base = (slash == std::string::npos) ? path : path.substr(slash + 1);
+    if (base == "env")
+    {
+        // ponytail: "#!/usr/bin/env X" form; the interpreter follows env
+        while (i < len && (line[i] == ' ' || line[i] == '\t')) { i++; }
+        start = i;
+        while (i < len && line[i] != ' ' && line[i] != '\t'
+            && line[i] != '\n' && line[i] != '\r' && line[i] != '\0') { i++; }
+        base.assign(line + start, i - start);
+    }
+    for (;;)
+    {
+        while (!base.empty() && base[base.size() - 1] >= '0' && base[base.size() - 1] <= '9')
+        {
+            base.resize(base.size() - 1);
+        }
+        if (!base.empty() && base[base.size() - 1] == '.') { base.resize(base.size() - 1); continue; }
+        break;
+    }
+    return base;
+}
+
+std::string languageForInterpreter(const std::string& interp)
+{
+    if (interp == "python" || interp == "python3") { return "python"; }
+    if (interp == "node" || interp == "nodejs") { return "js"; }
+    if (interp == "ruby") { return "ruby"; }
+    if (interp == "php") { return "php"; }
+    return std::string();
+}
+}
+
+std::string FormatterFactory::detectLanguageForFile(const char* filepath,
+    const Config& config)
+{
+    std::string base = detectLanguage(filepath);
+    if (base != "js" || isJsExtension(filepath)) { return base; }
+    if (config.detectShebangLanguage && filepath != NULL)
+    {
+        FILE* f = fopen(filepath, "rb");
+        if (f != NULL)
+        {
+            char line[256];
+            size_t got = fread(line, 1, sizeof(line) - 1, f);
+            fclose(f);
+            line[got] = '\0';
+            if (got > 2 && line[0] == '#' && line[1] == '!')
+            {
+                std::string lang = languageForInterpreter(shebangInterpreter(line, got));
+                if (!lang.empty()) { return lang; }
+            }
+        }
+    }
+    if (!config.defaultLanguage.empty()) { return config.defaultLanguage; }
+    return base;
 }
 
 FormatterVisitor* FormatterFactory::create(const std::string& language, OutputBuffer& out, const Config& config)
