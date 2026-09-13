@@ -24,6 +24,16 @@ public:
     static std::string detectLanguage(const char* filepath);
 
     /**
+     * Config-aware detection: unknown extensions fall back to
+     * config.defaultLanguage, and when config.detectShebangLanguage is
+     * set, a `#!` interpreter line maps to its language (python, node,
+     * ruby, php only; anything else keeps the fallback). Known
+     * extensions always win over the shebang.
+     */
+    static std::string detectLanguageForFile(const char* filepath,
+        const Config& config);
+
+    /**
      * Creates the formatter for a canonical language code.
      * Unknown codes yield a JSFormatter. Caller owns the result.
      */
