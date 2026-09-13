@@ -52,7 +52,7 @@ void ZigFormatter::visitClassDecl(ClassDeclNode& node)
     printToken("const");
     printSpace();
     printToken(node.m_name.c_str());
-    printToken(" = ");
+    printAssign();
     printToken(node.m_kind.empty() ? "struct" : node.m_kind.c_str());
     if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
@@ -66,7 +66,7 @@ void ZigFormatter::visitImportDecl(ImportDeclNode& node)
         printToken("const");
         printSpace();
         node.m_defaultImport->accept(*this);
-        printToken(" = ");
+        printAssign();
     }
     printToken("@import(\"");
     printToken(node.m_source.c_str());
