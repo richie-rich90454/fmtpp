@@ -125,6 +125,7 @@ void GoFormatter::visitProgramNode(ProgramNode& node)
     size_t count = node.m_statements.size();
     for (size_t i = 0; i < count; i++)
     {
+        printStatementBlanks(node.m_statements, i);
         if (node.m_statements[i] != NULL) { node.m_statements[i]->accept(*this); }
         if (i < count - 1) { printNewline(); }
     }
@@ -167,7 +168,7 @@ void GoFormatter::visitVariableDeclNode(VariableDeclNode& node)
         {
             // Short variable declaration with :=
             printToken(node.m_name.c_str());
-            printToken(" := ");
+            printShortAssign();
             node.m_initializer->accept(*this);
         }
         else
@@ -185,12 +186,12 @@ void GoFormatter::visitVariableDeclNode(VariableDeclNode& node)
         printSpace();
         printToken(node.m_name.c_str());
         if (!node.m_type.empty()) { printSpace(); printToken(node.m_type.c_str()); }
-        if (node.m_initializer != NULL) { printToken(" = "); node.m_initializer->accept(*this); }
+        if (node.m_initializer != NULL) { printAssign(); node.m_initializer->accept(*this); }
     }
     else
     {
         printToken(node.m_name.c_str());
-        printToken(" := ");
+        printShortAssign();
         if (node.m_initializer != NULL) { node.m_initializer->accept(*this); }
     }
     printNewline();
@@ -214,12 +215,19 @@ void GoFormatter::visitImportDeclNode(ImportDeclNode& node)
 
 void GoFormatter::visitBlockNode(BlockNode& node)
 {
+    if (node.m_statements.empty() && m_config.emptyBlockSameLine)
+    {
+        printToken("{}");
+        printNewline();
+        return;
+    }
     printToken("{");
     printNewline();
     indent();
     size_t sc = node.m_statements.size();
     for (size_t i = 0; i < sc; i++)
     {
+        printStatementBlanks(node.m_statements, i);
         printIndent();
         if (node.m_statements[i] != NULL) { node.m_statements[i]->accept(*this); }
         if (i < sc - 1) { printNewline(); }
@@ -288,6 +296,35 @@ void GoFormatter::visitWhileStmtNode(WhileStmtNode& node)
     else { printNewline(); }
 }
 
+namespace {
+// gofmt puts arm bodies one level deeper than the arm labels, but V
+// match arms print whole (see switchArmBodyExtraIndent). Arms arrive
+// as flat per-line RawText nodes, so detect `case`/`default` leaders.
+bool isGoCaseLabelLine(ASTNode* node)
+{
+    if (node == NULL || !node->isRawText()) { return false; }
+    const std::string& t = static_cast<RawTextNode*>(node)->m_text;
+    size_t i = 0;
+    while (i < t.size() && (t[i] == ' ' || t[i] == '\t')) { i++; }
+    if (t.compare(i, 4, "case") == 0)
+    {
+        size_t j = i + 4;
+        return j >= t.size() || t[j] == ' ' || t[j] == '\t' || t[j] == ':' || t[j] == '(';
+    }
+    if (t.compare(i, 7, "default") == 0)
+    {
+        size_t j = i + 7;
+        return j >= t.size() || t[j] == ' ' || t[j] == '\t' || t[j] == ':' || t[j] == ';';
+    }
+    return false;
+}
+}
+
+bool GoFormatter::switchArmBodyExtraIndent() const
+{
+    return true;
+}
+
 void GoFormatter::visitSwitchStmtNode(SwitchStmtNode& node)
 {
     // ponytail: select shares this printer (same arms, own keyword)
@@ -300,7 +337,13 @@ void GoFormatter::visitSwitchStmtNode(SwitchStmtNode& node)
     size_t cc = node.m_cases.size();
     for (size_t i = 0; i < cc; i++)
     {
-        printIndent();
+        if (switchArmBodyExtraIndent() && !isGoCaseLabelLine(node.m_cases[i]))
+        {
+            indent();
+            printIndent();
+            dedent();
+        }
+        else { printIndent(); }
         if (node.m_cases[i] != NULL) { node.m_cases[i]->accept(*this); }
         printNewline();
     }
