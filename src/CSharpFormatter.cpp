@@ -34,6 +34,17 @@ CSharpFormatter::~CSharpFormatter()
 {
 }
 
+bool CSharpFormatter::defaultFunctionBraceSameLine() const
+{
+    // ponytail: C# house style is Allman; braceStyleFunctions overrides it
+    return false;
+}
+
+bool CSharpFormatter::defaultTypeBraceSameLine() const
+{
+    return false;
+}
+
 void CSharpFormatter::visitClassDecl(ClassDeclNode& node)
 {
     // C# class/struct: public class Name : BaseClass, IInterface { }
@@ -70,7 +81,7 @@ void CSharpFormatter::visitClassDecl(ClassDeclNode& node)
             first = false;
         }
     }
-    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printTypeBraceGap(); node.m_body->accept(*this); }
     else { printNewline(); }
 }
 
@@ -93,15 +104,18 @@ void CSharpFormatter::visitFunctionDecl(FunctionDeclNode& node)
         printSpace();
     }
     printToken(node.m_name.c_str());
+    if (m_config.spaceBeforeFunctionParen) { printSpace(); }
     printToken("(");
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     size_t pc = node.m_params.size();
     for (size_t i = 0; i < pc; i++)
     {
         if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
         if (i < pc - 1) { printComma(); }
     }
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     printToken(")");
-    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printFunctionBraceGap(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
 }
 
@@ -133,7 +147,7 @@ void CSharpFormatter::visitInterfaceDecl(InterfaceDeclNode& node)
             if (i < ec - 1) { printComma(); }
         }
     }
-    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printTypeBraceGap(); node.m_body->accept(*this); }
     else { printNewline(); }
 }
 
