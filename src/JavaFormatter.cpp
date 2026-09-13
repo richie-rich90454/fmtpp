@@ -41,15 +41,18 @@ void JavaFormatter::visitFunctionDecl(FunctionDeclNode& node)
         printSpace();
     }
     printToken(node.m_name.c_str());
+    if (m_config.spaceBeforeFunctionParen) { printSpace(); }
     printToken("(");
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     size_t pc = node.m_params.size();
     for (size_t i = 0; i < pc; i++)
     {
         if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
         if (i < pc - 1) { printComma(); }
     }
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     printToken(")");
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printFunctionBraceGap(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
 }
 
@@ -88,7 +91,7 @@ void JavaFormatter::visitClassDecl(ClassDeclNode& node)
             if (i < ic - 1) { printComma(); }
         }
     }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printTypeBraceGap(); node.m_body->accept(*this); }
     else { printNewline(); }
 }
 
@@ -143,7 +146,10 @@ void JavaFormatter::visitTryCatchStmt(TryCatchStmtNode& node)
     if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
     if (node.m_catchClause != NULL || node.m_catchBody != NULL)
     {
-        printSpace();
+        bool catchNewLine = (m_config.catchOnNewLine == "always")
+            || (m_config.catchOnNewLine == "auto" && node.m_catchOnNewLine);
+        if (catchNewLine) { printNewline(); printIndent(); }
+        else { printSpace(); }
         printToken("catch");
         if (node.m_catchClause != NULL)
         {
@@ -162,7 +168,10 @@ void JavaFormatter::visitTryCatchStmt(TryCatchStmtNode& node)
     }
     if (node.m_finallyBlock != NULL)
     {
-        printSpace();
+        bool finallyNewLine = (m_config.finallyOnNewLine == "always")
+            || (m_config.finallyOnNewLine == "auto" && node.m_finallyOnNewLine);
+        if (finallyNewLine) { printNewline(); printIndent(); }
+        else { printSpace(); }
         printToken("finally");
         printSpace();
         node.m_finallyBlock->accept(*this);
