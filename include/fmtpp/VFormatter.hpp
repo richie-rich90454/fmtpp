@@ -26,4 +26,5 @@ public:
 
 protected:
     virtual const char* switchKeyword() const;
+    virtual bool switchArmBodyExtraIndent() const;
 };
