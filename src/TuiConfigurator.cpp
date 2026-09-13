@@ -686,6 +686,35 @@ bool TuiConfigurator::saveConfig()
     tbl.insert_or_assign("vueIndentScriptAndStyle", m_config.vueIndentScriptAndStyle);
     tbl.insert_or_assign("embeddedLanguageFormatting", m_config.embeddedLanguageFormatting);
     tbl.insert_or_assign("singleAttributePerLine", m_config.singleAttributePerLine);
+    tbl.insert_or_assign("preserveBlankLines", m_config.preserveBlankLines);
+    tbl.insert_or_assign("maxBlankLines", m_config.maxBlankLines);
+    tbl.insert_or_assign("blankLineAtFileStart", m_config.blankLineAtFileStart);
+    tbl.insert_or_assign("blankLineAfterImports", m_config.blankLineAfterImports);
+    tbl.insert_or_assign("blankLineBeforeReturn", m_config.blankLineBeforeReturn);
+    tbl.insert_or_assign("blankLinesAroundTopLevelDefs", m_config.blankLinesAroundTopLevelDefs);
+    tbl.insert_or_assign("finalNewline", m_config.finalNewline);
+    tbl.insert_or_assign("indentEmptyLines", m_config.indentEmptyLines);
+    tbl.insert_or_assign("emitBom", m_config.emitBom);
+    tbl.insert_or_assign("braceStyleFunctions", m_config.braceStyleFunctions);
+    tbl.insert_or_assign("braceStyleTypes", m_config.braceStyleTypes);
+    tbl.insert_or_assign("spaceAfterComma", m_config.spaceAfterComma);
+    tbl.insert_or_assign("spaceAfterColon", m_config.spaceAfterColon);
+    tbl.insert_or_assign("spaceBeforeFunctionParen", m_config.spaceBeforeFunctionParen);
+    tbl.insert_or_assign("spaceInParens", m_config.spaceInParens);
+    tbl.insert_or_assign("spaceInCondParens", m_config.spaceInCondParens);
+    tbl.insert_or_assign("spaceInBrackets", m_config.spaceInBrackets);
+    tbl.insert_or_assign("arrowSpacing", m_config.arrowSpacing);
+    tbl.insert_or_assign("templateExprSpacing", m_config.templateExprSpacing);
+    tbl.insert_or_assign("spaceAroundAssignment", m_config.spaceAroundAssignment);
+    tbl.insert_or_assign("quoteAvoidEscape", m_config.quoteAvoidEscape);
+    tbl.insert_or_assign("emptyBlockSameLine", m_config.emptyBlockSameLine);
+    tbl.insert_or_assign("indentSwitchCase", m_config.indentSwitchCase);
+    tbl.insert_or_assign("elseOnNewLine", m_config.elseOnNewLine);
+    tbl.insert_or_assign("catchOnNewLine", m_config.catchOnNewLine);
+    tbl.insert_or_assign("finallyOnNewLine", m_config.finallyOnNewLine);
+    tbl.insert_or_assign("joinElseIf", m_config.joinElseIf);
+    tbl.insert_or_assign("detectShebangLanguage", m_config.detectShebangLanguage);
+    tbl.insert_or_assign("defaultLanguage", m_config.defaultLanguage);
 
     std::ofstream file(".fmtpp.toml");
     if (!file.is_open())
