@@ -41,6 +41,38 @@ public:
     virtual bool isIfStmt() const { return false; }
 
     /**
+     * True for ImportDeclNode and PreprocessorDirectiveNode only. Lets
+     * blank-line rules find import blocks without RTTI.
+     */
+    virtual bool isImportDirective() const { return false; }
+
+    /**
+     * True for ReturnStmtNode only. Lets blank-line rules find returns
+     * without RTTI.
+     */
+    virtual bool isReturnStmt() const { return false; }
+
+    /**
+     * True for FunctionDeclNode only. Lets blank-line rules find
+     * top-level definitions without RTTI.
+     */
+    virtual bool isFunctionDecl() const { return false; }
+
+    /**
+     * True for ClassDeclNode only. Lets blank-line rules find
+     * top-level definitions without RTTI.
+     */
+    virtual bool isClassDecl() const { return false; }
+
+    /**
+     * Blank lines the source had before this statement (capped at 1 by
+     * the parser, prettier-style). Statement-list printers re-emit one
+     * blank line when this is positive, so hand-placed separators
+     * survive formatting; zero keeps output compact.
+     */
+    int m_blankLinesBefore = 0;
+
+    /**
      * Allocates memory for an ASTNode subclass from the global MemoryPool.
      * @param size Number of bytes to allocate.
      * @return Pointer to allocated memory, or NULL if the pool is exhausted.
