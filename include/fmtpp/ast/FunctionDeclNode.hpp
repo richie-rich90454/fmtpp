@@ -23,6 +23,9 @@ public:
     /** @see ASTNode::accept */
     virtual void accept(ASTVisitor& visitor);
 
+    /** @see ASTNode::isFunctionDecl */
+    virtual bool isFunctionDecl() const { return true; }
+
     /** Function name. */
     std::string m_name;
 
