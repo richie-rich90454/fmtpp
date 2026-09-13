@@ -28,7 +28,7 @@ void VFormatter::visitVariableDeclNode(VariableDeclNode& node)
         printToken("mut");
         printSpace();
         printToken(node.m_name.c_str());
-        printToken(" := ");
+        printShortAssign();
         node.m_initializer->accept(*this);
         printNewline();
         return;
@@ -138,6 +138,11 @@ const char* VFormatter::switchKeyword() const
     // ponytail: V spells it match; printing switch would emit invalid V
     // that the next pass cannot even parse back (idempotency repair)
     return "match";
+}
+
+bool VFormatter::switchArmBodyExtraIndent() const
+{
+    return false;
 }
 
 // Easter egg: VFormatter complete - v fmt . would be proud
