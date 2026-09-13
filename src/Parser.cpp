@@ -229,6 +229,43 @@ bool atLineStart(const Cursor& c)
     return c.d[c.p - 1] == '\n';
 }
 
+// Normalizes CRLF/CR line endings to LF. Scanners assume '\n' everywhere;
+// a stray '\r' would ride into verbatim text and resurface as mixed
+// endings in formatted output. Zero-copy when no '\r' is present.
+bool normalizeNewlines(const char* src, size_t len, std::string& out)
+{
+    if (src == NULL || memchr(src, '\r', len) == NULL) { return false; }
+    out.clear();
+    out.reserve(len);
+    for (size_t i = 0; i < len; i++)
+    {
+        if (src[i] == '\r')
+        {
+            out.push_back('\n');
+            if (i + 1 < len && src[i + 1] == '\n') { i++; }
+        }
+        else { out.push_back(src[i]); }
+    }
+    return true;
+}
+
+// Blank lines separating previous content from the next statement
+// (capped at 9). Measures from the end of previous content (not c.p:
+// line-based statements already consumed their terminator newline,
+// which would otherwise undercount the gap by one) to the next token.
+int blankGapBefore(Cursor& c)
+{
+    size_t back = c.p;
+    while (back > 0 && (c.d[back - 1] == ' ' || c.d[back - 1] == '\t' || c.d[back - 1] == '\n')) { back--; }
+    size_t s = c.p;
+    while (s < c.n && (isHSpace(c.d[s]) || c.d[s] == '\n')) { s++; }
+    int nl = 0;
+    for (size_t k = back; k < s; k++) { if (c.d[k] == '\n') { nl++; } }
+    if (nl < 2) { return 0; }
+    int gaps = nl - 1;
+    return gaps > 9 ? 9 : gaps;
+}
+
 // Reads backward over horizontal space; returns the char before, or '\0'.
 char prevSignificant(const Cursor& c, size_t pos)
 {
@@ -1267,7 +1304,12 @@ std::string parseCondRest(Cursor& c)
 void attachElse(Cursor& c, IfStmtNode* ifNode)
 {
     size_t save = c.p;
-    while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n')) { c.p++; }
+    bool sawNewline = false;
+    while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n'))
+    {
+        if (c.d[c.p] == '\n') { sawNewline = true; }
+        c.p++;
+    }
     size_t wstart = c.p;
     while (c.p < c.n && isIdent(c.d[c.p])) { c.p++; }
     std::string w(c.d + wstart, c.p - wstart);
@@ -1283,7 +1325,11 @@ void attachElse(Cursor& c, IfStmtNode* ifNode)
             IfStmtNode* nested = ASTNodeFactory::createIfStmtNode();
             nested->m_condition = mkValue(cond);
             nested->m_thenBranch = parseBlock(c);
+            // ponytail: single-word elseif keeps its keyword so the
+            // printer can reproduce it when joinElseIf is off
+            nested->m_keyword = "elseif";
             ifNode->m_elseBranch = nested;
+            if (sawNewline) { ifNode->m_elseOnNewLine = true; }
             // ponytail: chains continue (elseif/else after elseif)
             attachElse(c, nested);
             return;
@@ -1310,6 +1356,7 @@ void attachElse(Cursor& c, IfStmtNode* ifNode)
             nested->m_condition = mkValue(cond);
             nested->m_thenBranch = parseBlock(c);
             ifNode->m_elseBranch = nested;
+            if (sawNewline) { ifNode->m_elseOnNewLine = true; }
             // ponytail: chains continue (else after else-if)
             attachElse(c, nested);
             return;
@@ -1320,6 +1367,7 @@ void attachElse(Cursor& c, IfStmtNode* ifNode)
     if (c.p < c.n && c.d[c.p] == '{')
     {
         ifNode->m_elseBranch = parseBlock(c);
+        if (sawNewline) { ifNode->m_elseOnNewLine = true; }
         return;
     }
     c.p = save;
@@ -1384,12 +1432,20 @@ std::string readBalancedChunk(Cursor& c)
 
 void parseItems(Cursor& c, std::vector<ASTNode*>& out)
 {
+    // ponytail: a 2+ newline gap before a statement means the source had
+    // a blank line; stamp it so printers re-emit exactly one (prettier
+    // preserves one, drops the rest)
+    bool first = true;
     for (;;)
     {
+        size_t n0 = out.size();
+        int wantBlanks = first ? 0 : blankGapBefore(c);
+        first = false;
         bool end = false;
         size_t before = c.p;
         parseOne(c, out, end);
         if (end) { break; }
+        if (wantBlanks > 0 && out.size() > n0) { out[n0]->m_blankLinesBefore = wantBlanks; }
         if (c.p == before)
         {
             // ponytail: unreachable safety net; keeps one byte verbatim
@@ -1413,8 +1469,12 @@ BlockNode* parseBlock(Cursor& c, bool rawMembers)
     {
         // ponytail: struct/interface bodies in go/v/rust keep every
         // member line verbatim (fields, tags, embedded names, methods)
+        bool first = true;
         for (;;)
         {
+            size_t n0 = block->m_statements.size();
+            int wantBlanks = first ? 0 : blankGapBefore(c);
+            first = false;
             skipTrivia(c, &block->m_statements);
             if (c.p >= c.n) { break; }
             if (c.d[c.p] == '}') { c.p++; break; }
@@ -1423,11 +1483,16 @@ BlockNode* parseBlock(Cursor& c, bool rawMembers)
             VariableDeclNode* var = ASTNodeFactory::createVariableDeclNode();
             var->m_name = member;
             block->m_statements.push_back(var);
+            if (wantBlanks > 0 && block->m_statements.size() > n0) { block->m_statements[n0]->m_blankLinesBefore = wantBlanks; }
         }
         return block;
     }
+    bool first = true;
     for (;;)
     {
+        size_t n0 = block->m_statements.size();
+        int wantBlanks = first ? 0 : blankGapBefore(c);
+        first = false;
         skipTrivia(c, &block->m_statements);
         if (c.p >= c.n) { break; }
         if (c.d[c.p] == '}') { c.p++; break; }
@@ -1435,6 +1500,7 @@ BlockNode* parseBlock(Cursor& c, bool rawMembers)
         size_t before = c.p;
         parseOne(c, block->m_statements, end);
         if (end) { break; }
+        if (wantBlanks > 0 && block->m_statements.size() > n0) { block->m_statements[n0]->m_blankLinesBefore = wantBlanks; }
         if (c.p == before)
         {
             if (c.p < c.n && c.d[c.p] != '}')
@@ -3163,12 +3229,19 @@ void parseTryRest(Cursor& c, std::vector<ASTNode*>& out)
     {
         node->m_body = parseBlock(c);
     }
-    // catch/finally chain: whitespace (not comments) may intervene
+    // catch/finally chain: whitespace (not comments) may intervene.
+    // A newline between `}` and the keyword means Allman placement;
+    // stamp it so printers reproduce rather than normalize it.
     bool firstCatch = true;
     for (;;)
     {
         size_t save = c.p;
-        while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n')) { c.p++; }
+        bool sawNewline = false;
+        while (c.p < c.n && (isHSpace(c.d[c.p]) || c.d[c.p] == '\n'))
+        {
+            if (c.d[c.p] == '\n') { sawNewline = true; }
+            c.p++;
+        }
         size_t ws = c.p;
         while (c.p < c.n && isIdent(c.d[c.p])) { c.p++; }
         std::string w(c.d + ws, c.p - ws);
@@ -3178,8 +3251,18 @@ void parseTryRest(Cursor& c, std::vector<ASTNode*>& out)
             break;
         }
         parseCatchInto(c, node, firstCatch, w == "finally");
-        if (w == "catch") { firstCatch = false; }
-        else { break; }
+        if (w == "catch")
+        {
+            // ponytail: only the first catch belongs to this node;
+            // later ones ride in m_extraCatches and keep current behavior
+            if (firstCatch && sawNewline) { node->m_catchOnNewLine = true; }
+            firstCatch = false;
+        }
+        else
+        {
+            if (sawNewline) { node->m_finallyOnNewLine = true; }
+            break;
+        }
     }
     out.push_back(node);
 }
@@ -3294,6 +3377,8 @@ void htmlAttach(ProgramNode* prog, std::vector<HtmlElementNode*>& stack, ASTNode
 
 ProgramNode* parseHtmlDoc(const char* src, size_t len)
 {
+    std::string normalized;
+    if (normalizeNewlines(src, len, normalized)) { src = normalized.c_str(); len = normalized.size(); }
     Cursor c;
     c.d = src;
     c.n = len;
@@ -3567,6 +3652,8 @@ ASTNode* parseJsonValue(JsonCursor& c)
 
 ProgramNode* parseJsonDoc(const char* src, size_t len)
 {
+    std::string normalized;
+    if (normalizeNewlines(src, len, normalized)) { src = normalized.c_str(); len = normalized.size(); }
     JsonCursor c;
     c.d = src;
     c.n = len;
@@ -6380,6 +6467,8 @@ ProgramNode* Parser::parseNested(const char* source, size_t len, const std::stri
     {
         return parseJsonDoc(source, len);
     }
+    std::string normalized;
+    if (normalizeNewlines(source, len, normalized)) { source = normalized.c_str(); len = normalized.size(); }
     Cursor c;
     c.d = source;
     c.n = len;
