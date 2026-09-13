@@ -73,6 +73,48 @@ bool CstyleFormatterBase::spaceAfterKeywords() const
     return m_config.spaceAfterKeyword;
 }
 
+bool CstyleFormatterBase::defaultFunctionBraceSameLine() const
+{
+    return true;
+}
+
+bool CstyleFormatterBase::defaultTypeBraceSameLine() const
+{
+    return true;
+}
+
+bool CstyleFormatterBase::functionBraceSameLine() const
+{
+    if (m_config.braceStyleFunctions == "same-line") { return true; }
+    if (m_config.braceStyleFunctions == "next-line") { return false; }
+    return defaultFunctionBraceSameLine();
+}
+
+bool CstyleFormatterBase::typeBraceSameLine() const
+{
+    if (m_config.braceStyleTypes == "same-line") { return true; }
+    if (m_config.braceStyleTypes == "next-line") { return false; }
+    return defaultTypeBraceSameLine();
+}
+
+void CstyleFormatterBase::printFunctionBraceGap()
+{
+    if (functionBraceSameLine()) { printSpace(); }
+    else { printNewline(); printIndent(); }
+}
+
+void CstyleFormatterBase::printTypeBraceGap()
+{
+    if (typeBraceSameLine()) { printSpace(); }
+    else { printNewline(); printIndent(); }
+}
+
+void CstyleFormatterBase::printBlockBraceGap()
+{
+    if (braceOnSameLine()) { printSpace(); }
+    else { printNewline(); printIndent(); }
+}
+
 bool CstyleFormatterBase::requiresSemicolon(ASTNode*) const
 {
     return m_config.semi;
@@ -116,6 +158,7 @@ void CstyleFormatterBase::visitProgram(ProgramNode& node)
     size_t count = node.m_statements.size();
     for (size_t i = 0; i < count; i++)
     {
+        printStatementBlanks(node.m_statements, i);
         if (node.m_statements[i] != NULL) { node.m_statements[i]->accept(*this); }
         if (i < count - 1) { printNewline(); }
     }
@@ -126,16 +169,24 @@ void CstyleFormatterBase::visitFunctionDecl(FunctionDeclNode& node)
     printToken("function");
     if (spaceAfterKeywords()) { printSpace(); }
     printToken(node.m_name.c_str());
+    if (m_config.spaceBeforeFunctionParen) { printSpace(); }
     printToken("(");
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     size_t pc = node.m_params.size();
     for (size_t i = 0; i < pc; i++)
     {
         if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
         if (i < pc - 1) { printComma(); }
     }
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     printToken(")");
-    if (!node.m_returnType.empty()) { printToken(": "); printToken(node.m_returnType.c_str()); }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (!node.m_returnType.empty())
+    {
+        printToken(":");
+        if (m_config.spaceAfterColon) { printSpace(); }
+        printToken(node.m_returnType.c_str());
+    }
+    if (node.m_body != NULL) { printFunctionBraceGap(); node.m_body->accept(*this); }
     else { printSemicolon(); printNewline(); }
 }
 
@@ -144,8 +195,17 @@ void CstyleFormatterBase::visitVariableDecl(VariableDeclNode& node)
     printToken(node.m_kind.c_str());
     printSpace();
     printToken(node.m_name.c_str());
-    if (!node.m_type.empty()) { printToken(": "); printToken(node.m_type.c_str()); }
-    if (node.m_initializer != NULL) { printToken(" = "); node.m_initializer->accept(*this); }
+    if (!node.m_type.empty())
+    {
+        printToken(":");
+        if (m_config.spaceAfterColon) { printSpace(); }
+        printToken(node.m_type.c_str());
+    }
+    if (node.m_initializer != NULL)
+    {
+        printAssign();
+        node.m_initializer->accept(*this);
+    }
     printSemicolonIfNeeded(&node);
     printNewline();
 }
@@ -154,14 +214,48 @@ void CstyleFormatterBase::visitIfStmt(IfStmtNode& node)
 {
     printToken("if");
     if (spaceAfterKeywords()) { printSpace(); }
-    if (node.m_condition != NULL) { printToken("("); node.m_condition->accept(*this); printToken(")"); }
-    if (node.m_thenBranch != NULL) { printSpace(); node.m_thenBranch->accept(*this); }
+    if (node.m_condition != NULL)
+    {
+        printToken("(");
+        if (m_config.spaceInCondParens) { printSpace(); }
+        node.m_condition->accept(*this);
+        if (m_config.spaceInCondParens) { printSpace(); }
+        printToken(")");
+    }
+    if (node.m_thenBranch != NULL) { printBlockBraceGap(); node.m_thenBranch->accept(*this); }
     if (node.m_elseBranch != NULL)
     {
-        printSpace();
-        printToken("else");
-        printSpace();
-        node.m_elseBranch->accept(*this);
+        bool elseNewLine = (m_config.elseOnNewLine == "always")
+            || (m_config.elseOnNewLine == "auto" && node.m_elseOnNewLine);
+        if (elseNewLine) { printNewline(); printIndent(); }
+        else { printSpace(); }
+        IfStmtNode* nested = node.m_elseBranch->isIfStmt()
+            ? static_cast<IfStmtNode*>(node.m_elseBranch) : NULL;
+        if (!m_config.joinElseIf && nested != NULL && nested->m_keyword == "elseif")
+        {
+            printToken("elseif");
+            printSpace();
+            printToken("(");
+            if (nested->m_condition != NULL) { nested->m_condition->accept(*this); }
+            printToken(")");
+            if (nested->m_thenBranch != NULL) { printBlockBraceGap(); nested->m_thenBranch->accept(*this); }
+            if (nested->m_elseBranch != NULL)
+            {
+                bool nestedNewLine = (m_config.elseOnNewLine == "always")
+                    || (m_config.elseOnNewLine == "auto" && nested->m_elseOnNewLine);
+                if (nestedNewLine) { printNewline(); printIndent(); }
+                else { printSpace(); }
+                printToken("else");
+                printSpace();
+                nested->m_elseBranch->accept(*this);
+            }
+        }
+        else
+        {
+            printToken("else");
+            printSpace();
+            node.m_elseBranch->accept(*this);
+        }
     }
 }
 
@@ -174,21 +268,25 @@ void CstyleFormatterBase::visitForStmt(ForStmtNode& node)
     {
         if (spaceAfterKeywords()) { printSpace(); }
         printToken("(");
+        if (m_config.spaceInCondParens) { printSpace(); }
         if (node.m_init != NULL) { node.m_init->accept(*this); }
         printToken("; ");
         if (node.m_condition != NULL) { node.m_condition->accept(*this); }
         printToken("; ");
         if (node.m_update != NULL) { node.m_update->accept(*this); }
+        if (m_config.spaceInCondParens) { printSpace(); }
         printToken(")");
     }
     else if (node.m_condition != NULL)
     {
         printSpace();
         printToken("(");
+        if (m_config.spaceInCondParens) { printSpace(); }
         node.m_condition->accept(*this);
+        if (m_config.spaceInCondParens) { printSpace(); }
         printToken(")");
     }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printBlockBraceGap(); node.m_body->accept(*this); }
     else { printSemicolon(); printNewline(); }
 }
 
@@ -196,23 +294,63 @@ void CstyleFormatterBase::visitWhileStmt(WhileStmtNode& node)
 {
     printToken("while");
     if (spaceAfterKeywords()) { printSpace(); }
-    if (node.m_condition != NULL) { printToken("("); node.m_condition->accept(*this); printToken(")"); }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_condition != NULL)
+    {
+        printToken("(");
+        if (m_config.spaceInCondParens) { printSpace(); }
+        node.m_condition->accept(*this);
+        if (m_config.spaceInCondParens) { printSpace(); }
+        printToken(")");
+    }
+    if (node.m_body != NULL) { printBlockBraceGap(); node.m_body->accept(*this); }
     else { printSemicolon(); printNewline(); }
+}
+
+namespace {
+// C-style switch arms arrive as flat per-line RawText nodes (see
+// pushSwitchArm): label lines and body lines are indistinguishable in
+// type, so detect `case`/`default` leaders here. Labels print one level
+// out (same level as the switch), bodies stay indented.
+bool isCaseLabelLine(ASTNode* node)
+{
+    if (node == NULL || !node->isRawText()) { return false; }
+    const std::string& t = static_cast<RawTextNode*>(node)->m_text;
+    size_t i = 0;
+    while (i < t.size() && (t[i] == ' ' || t[i] == '\t')) { i++; }
+    if (t.compare(i, 4, "case") == 0)
+    {
+        size_t j = i + 4;
+        return j >= t.size() || t[j] == ' ' || t[j] == '\t' || t[j] == ':' || t[j] == '(';
+    }
+    if (t.compare(i, 7, "default") == 0)
+    {
+        size_t j = i + 7;
+        return j >= t.size() || t[j] == ' ' || t[j] == '\t' || t[j] == ':' || t[j] == ';';
+    }
+    return false;
+}
 }
 
 void CstyleFormatterBase::visitSwitchStmt(SwitchStmtNode& node)
 {
     printToken("switch");
     if (spaceAfterKeywords()) { printSpace(); }
-    if (node.m_discriminant != NULL) { printToken("("); node.m_discriminant->accept(*this); printToken(")"); }
+    if (node.m_discriminant != NULL)
+    {
+        printToken("(");
+        if (m_config.spaceInCondParens) { printSpace(); }
+        node.m_discriminant->accept(*this);
+        if (m_config.spaceInCondParens) { printSpace(); }
+        printToken(")");
+    }
     printOpeningBrace();
     printNewline();
     indent();
     size_t cc = node.m_cases.size();
     for (size_t i = 0; i < cc; i++)
     {
-        printIndent();
+        if (m_config.indentSwitchCase && isCaseLabelLine(node.m_cases[i])) { dedent(); printIndent(); indent(); }
+        else { printIndent(); }
         if (node.m_cases[i] != NULL) { node.m_cases[i]->accept(*this); }
         printNewline();
     }
@@ -224,12 +362,19 @@ void CstyleFormatterBase::visitSwitchStmt(SwitchStmtNode& node)
 
 void CstyleFormatterBase::visitBlock(BlockNode& node)
 {
+    if (node.m_statements.empty() && m_config.emptyBlockSameLine)
+    {
+        printToken("{}");
+        printNewline();
+        return;
+    }
     printOpeningBrace();
     printNewline();
     indent();
     size_t sc = node.m_statements.size();
     for (size_t i = 0; i < sc; i++)
     {
+        printStatementBlanks(node.m_statements, i);
         printIndent();
         if (node.m_statements[i] != NULL) { node.m_statements[i]->accept(*this); }
         if (i < sc - 1) { printNewline(); }
@@ -259,19 +404,24 @@ void CstyleFormatterBase::visitThrowStmt(ThrowStmtNode& node)
 void CstyleFormatterBase::visitTryCatchStmt(TryCatchStmtNode& node)
 {
     printToken("try");
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printBlockBraceGap(); node.m_body->accept(*this); }
     if (node.m_catchClause != NULL || node.m_catchBody != NULL)
     {
-        printSpace();
+        bool catchNewLine = (m_config.catchOnNewLine == "always")
+            || (m_config.catchOnNewLine == "auto" && node.m_catchOnNewLine);
+        if (catchNewLine) { printNewline(); printIndent(); }
+        else { printSpace(); }
         printToken("catch");
         if (node.m_catchClause != NULL)
         {
             printSpace();
             printToken("(");
+            if (m_config.spaceInCondParens) { printSpace(); }
             node.m_catchClause->accept(*this);
+            if (m_config.spaceInCondParens) { printSpace(); }
             printToken(")");
         }
-        if (node.m_catchBody != NULL) { printSpace(); node.m_catchBody->accept(*this); }
+        if (node.m_catchBody != NULL) { printBlockBraceGap(); node.m_catchBody->accept(*this); }
     }
     for (size_t eci = 0; eci < node.m_extraCatches.size(); eci++)
     {
@@ -281,7 +431,16 @@ void CstyleFormatterBase::visitTryCatchStmt(TryCatchStmtNode& node)
         printSpace();
         node.m_extraCatches[eci]->accept(*this);
     }
-    if (node.m_finallyBlock != NULL) { printSpace(); printToken("finally"); printSpace(); node.m_finallyBlock->accept(*this); }
+    if (node.m_finallyBlock != NULL)
+    {
+        bool finallyNewLine = (m_config.finallyOnNewLine == "always")
+            || (m_config.finallyOnNewLine == "auto" && node.m_finallyOnNewLine);
+        if (finallyNewLine) { printNewline(); printIndent(); }
+        else { printSpace(); }
+        printToken("finally");
+        printBlockBraceGap();
+        node.m_finallyBlock->accept(*this);
+    }
 }
 void CstyleFormatterBase::visitComment(CommentNode& node)
 {
@@ -295,7 +454,11 @@ void CstyleFormatterBase::visitLiteral(LiteralNode& node)
     switch (node.m_type)
     {
     case LiteralNode::TYPE_STRING:
-        if (m_config.singleQuote) { m_out.printf("'%s'", node.m_value.c_str()); }
+        if (m_config.singleQuote
+            && (!m_config.quoteAvoidEscape || node.m_value.find('\'') == std::string::npos))
+        {
+            m_out.printf("'%s'", node.m_value.c_str());
+        }
         else { m_out.printf("\"%s\"", node.m_value.c_str()); }
         m_currentColumn += static_cast<int>(node.m_value.size()) + 2;
         break;
@@ -315,12 +478,14 @@ void CstyleFormatterBase::visitIdentifier(IdentifierNode& node)
 void CstyleFormatterBase::visitArrayLiteral(ArrayLiteralNode& node)
 {
     printToken("[");
+    if (m_config.spaceInBrackets && node.m_elements.size() > 0) { printSpace(); }
     size_t ec = node.m_elements.size();
     for (size_t i = 0; i < ec; i++)
     {
         if (node.m_elements[i] != NULL) { node.m_elements[i]->accept(*this); }
         if (i < ec - 1) { printComma(); }
     }
+    if (m_config.spaceInBrackets && node.m_elements.size() > 0) { printSpace(); }
     printToken("]");
 }
 
@@ -346,7 +511,13 @@ void CstyleFormatterBase::visitTemplateLiteral(TemplateLiteralNode& node)
     {
         if (node.m_quasis[i] != NULL) { node.m_quasis[i]->accept(*this); }
         if (i < node.m_expressions.size() && node.m_expressions[i] != NULL)
-        { printToken("${"); node.m_expressions[i]->accept(*this); printToken("}"); }
+        {
+            if (m_config.templateExprSpacing) { printToken("${ "); }
+            else { printToken("${"); }
+            node.m_expressions[i]->accept(*this);
+            if (m_config.templateExprSpacing) { printToken(" }"); }
+            else { printToken("}"); }
+        }
     }
     printToken("`");
 }
@@ -360,15 +531,18 @@ void CstyleFormatterBase::visitArrowFunction(ArrowFunctionNode& node)
     else
     {
         printToken("(");
+        if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
         size_t pc = node.m_params.size();
         for (size_t i = 0; i < pc; i++)
         {
             if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
             if (i < pc - 1) { printComma(); }
         }
+        if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
         printToken(")");
     }
-    printToken(" => ");
+    if (m_config.arrowSpacing) { printToken(" => "); }
+    else { printToken("=>"); }
     if (!node.m_returnType.empty()) { printToken(node.m_returnType.c_str()); printToken(" "); }
     if (node.m_body != NULL) { node.m_body->accept(*this); }
 }
@@ -389,7 +563,7 @@ void CstyleFormatterBase::visitClassDecl(ClassDeclNode& node)
             if (i < ic - 1) { printComma(); }
         }
     }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printTypeBraceGap(); node.m_body->accept(*this); }
 }
 void CstyleFormatterBase::visitInterfaceDecl(InterfaceDeclNode& node)
 {
@@ -415,7 +589,7 @@ void CstyleFormatterBase::visitInterfaceDecl(InterfaceDeclNode& node)
             if (i < ec - 1) { printComma(); }
         }
     }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printTypeBraceGap(); node.m_body->accept(*this); }
 }
 
 void CstyleFormatterBase::visitEnumDecl(EnumDeclNode& node)
@@ -432,7 +606,8 @@ void CstyleFormatterBase::visitEnumDecl(EnumDeclNode& node)
     }
     printSpace();
     printToken(node.m_name.c_str());
-    printOpeningBrace();
+    if (typeBraceSameLine()) { printOpeningBrace(); }
+    else { printNewline(); printIndent(); printToken("{"); }
     printNewline();
     indent();
     size_t mc = node.m_members.size();
@@ -453,7 +628,7 @@ void CstyleFormatterBase::visitTypeAlias(TypeAliasNode& node)
     printToken("type");
     printSpace();
     printToken(node.m_name.c_str());
-    printToken(" = ");
+    printAssign();
     if (node.m_typeAnnotation != NULL) { node.m_typeAnnotation->accept(*this); }
     printSemicolonIfNeeded(&node);
     printNewline();
@@ -520,7 +695,8 @@ void CstyleFormatterBase::visitNamespace(NamespaceNode& node)
 void CstyleFormatterBase::visitProperty(PropertyNode& node)
 {
     if (node.m_key != NULL) { node.m_key->accept(*this); }
-    printToken(": ");
+    printToken(":");
+    if (m_config.spaceAfterColon) { printSpace(); }
     if (node.m_value != NULL) { node.m_value->accept(*this); }
 }
 
@@ -548,10 +724,26 @@ void CstyleFormatterBase::visitHtmlElement(HtmlElementNode& node)
 {
     printToken("<");
     printToken(node.m_tag.c_str());
-    for (size_t i = 0; i < node.m_attrs.size(); i++)
+    if (m_config.singleAttributePerLine && node.m_attrs.size() > 1)
     {
-        printSpace();
-        printToken(node.m_attrs[i].c_str());
+        indent();
+        for (size_t i = 0; i < node.m_attrs.size(); i++)
+        {
+            printNewline();
+            printIndent();
+            printToken(node.m_attrs[i].c_str());
+        }
+        dedent();
+        printNewline();
+        printIndent();
+    }
+    else
+    {
+        for (size_t i = 0; i < node.m_attrs.size(); i++)
+        {
+            printSpace();
+            printToken(node.m_attrs[i].c_str());
+        }
     }
     if (node.m_selfClosing || isVoidElement(node.m_tag.c_str()))
     {
