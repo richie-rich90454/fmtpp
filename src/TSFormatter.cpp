@@ -34,16 +34,24 @@ void TSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
         if (spaceAfterKeywords()) { printSpace(); }
     }
     printToken(node.m_name.c_str());
+    if (m_config.spaceBeforeFunctionParen) { printSpace(); }
     printToken("(");
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     size_t pc = node.m_params.size();
     for (size_t i = 0; i < pc; i++)
     {
         if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
         if (i < pc - 1) { printComma(); }
     }
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     printToken(")");
-    if (!node.m_returnType.empty()) { printToken(": "); printToken(node.m_returnType.c_str()); }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (!node.m_returnType.empty())
+    {
+        printToken(":");
+        if (m_config.spaceAfterColon) { printSpace(); }
+        printToken(node.m_returnType.c_str());
+    }
+    if (node.m_body != NULL) { printFunctionBraceGap(); node.m_body->accept(*this); }
     else { printSemicolon(); printNewline(); }
 }
 
@@ -61,7 +69,7 @@ void TSFormatter::visitVariableDeclNode(VariableDeclNode& node)
         printToken(": ");
         printToken(node.m_type.c_str());
     }
-    if (node.m_initializer != NULL) { printToken(" = "); node.m_initializer->accept(*this); }
+    if (node.m_initializer != NULL) { printAssign(); node.m_initializer->accept(*this); }
     printSemicolonIfNeeded(&node);
     printNewline();
 }
@@ -72,7 +80,8 @@ void TSFormatter::visitPropertyNode(PropertyNode& node)
     if (node.m_key != NULL) { node.m_key->accept(*this); }
     if (node.m_value != NULL)
     {
-        printToken(": ");
+        printToken(":");
+        if (m_config.spaceAfterColon) { printSpace(); }
         node.m_value->accept(*this);
     }
     printSemicolonIfNeeded(&node);
@@ -94,7 +103,7 @@ void TSFormatter::visitInterfaceDeclNode(InterfaceDeclNode& node)
             if (i < ec - 1) { printComma(); }
         }
     }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printTypeBraceGap(); node.m_body->accept(*this); }
 }
 
 void TSFormatter::visitEnumDeclNode(EnumDeclNode& node)
@@ -111,7 +120,8 @@ void TSFormatter::visitEnumDeclNode(EnumDeclNode& node)
     }
     printSpace();
     printToken(node.m_name.c_str());
-    printOpeningBrace();
+    if (typeBraceSameLine()) { printOpeningBrace(); }
+    else { printNewline(); printIndent(); printToken("{"); }
     printNewline();
     indent();
     size_t mc = node.m_members.size();
@@ -132,7 +142,7 @@ void TSFormatter::visitTypeAliasNode(TypeAliasNode& node)
     printToken("type");
     printSpace();
     printToken(node.m_name.c_str());
-    printToken(" = ");
+    printAssign();
     if (node.m_typeAnnotation != NULL) { node.m_typeAnnotation->accept(*this); }
     printSemicolonIfNeeded(&node);
     printNewline();
