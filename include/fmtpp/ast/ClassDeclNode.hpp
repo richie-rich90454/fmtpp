@@ -21,6 +21,9 @@ public:
     /** @see ASTNode::accept */
     virtual void accept(ASTVisitor& visitor);
 
+    /** @see ASTNode::isClassDecl */
+    virtual bool isClassDecl() const { return true; }
+
     /** Class name. */
     std::string m_name;
 
