@@ -16,6 +16,13 @@ CppFormatter::~CppFormatter()
 {
 }
 
+bool CppFormatter::defaultFunctionBraceSameLine() const
+{
+    // ponytail: C++ house style is Allman for functions; the
+    // braceStyleFunctions option overrides it when explicit
+    return false;
+}
+
 void CppFormatter::visitClassDecl(ClassDeclNode& node)
 {
     // C++ class/struct/union with bases. Empty kind means "class",
@@ -46,7 +53,7 @@ void CppFormatter::visitClassDecl(ClassDeclNode& node)
             if (i < ic - 1) { printComma(); }
         }
     }
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printTypeBraceGap(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
     // ponytail: class definitions need their trailing semicolon
     if (node.m_body != NULL) { printToken(";"); printNewline(); }
@@ -75,15 +82,18 @@ void CppFormatter::visitFunctionDecl(FunctionDeclNode& node)
         printSpace();
     }
     printToken(node.m_name.c_str());
+    if (m_config.spaceBeforeFunctionParen) { printSpace(); }
     printToken("(");
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     size_t pc = node.m_params.size();
     for (size_t i = 0; i < pc; i++)
     {
         if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
         if (i < pc - 1) { printComma(); }
     }
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     printToken(")");
-    if (node.m_body != NULL) { printNewline(); printIndent(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printFunctionBraceGap(); node.m_body->accept(*this); }
     else { printToken(";"); printNewline(); }
 }
 
