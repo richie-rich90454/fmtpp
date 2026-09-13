@@ -63,15 +63,18 @@ void JSFormatter::visitFunctionDeclNode(FunctionDeclNode& node)
         if (spaceAfterKeywords()) { printSpace(); }
     }
     printToken(node.m_name.c_str());
+    if (m_config.spaceBeforeFunctionParen) { printSpace(); }
     printToken("(");
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     size_t pc = node.m_params.size();
     for (size_t i = 0; i < pc; i++)
     {
         if (node.m_params[i] != NULL) { node.m_params[i]->accept(*this); }
         if (i < pc - 1) { printComma(); }
     }
+    if (m_config.spaceInParens && node.m_params.size() > 0) { printSpace(); }
     printToken(")");
-    if (node.m_body != NULL) { printSpace(); node.m_body->accept(*this); }
+    if (node.m_body != NULL) { printFunctionBraceGap(); node.m_body->accept(*this); }
     else { printSemicolon(); printNewline(); }
 }
 
@@ -84,7 +87,7 @@ void JSFormatter::visitVariableDeclNode(VariableDeclNode& node)
         printSpace();
     }
     printToken(node.m_name.c_str());
-    if (node.m_initializer != NULL) { printToken(" = "); node.m_initializer->accept(*this); }
+    if (node.m_initializer != NULL) { printAssign(); node.m_initializer->accept(*this); }
     printSemicolonIfNeeded(&node);
     printNewline();
 }
@@ -177,7 +180,8 @@ void JSFormatter::visitArrowFunctionNode(ArrowFunctionNode& node)
         }
         printToken(")");
     }
-    printToken(" => ");
+    if (m_config.arrowSpacing) { printToken(" => "); }
+    else { printToken("=>"); }
     if (node.m_body != NULL) { node.m_body->accept(*this); }
 }
 
@@ -189,7 +193,13 @@ void JSFormatter::visitTemplateLiteralNode(TemplateLiteralNode& node)
     {
         if (node.m_quasis[i] != NULL) { node.m_quasis[i]->accept(*this); }
         if (i < node.m_expressions.size() && node.m_expressions[i] != NULL)
-        { printToken("${"); node.m_expressions[i]->accept(*this); printToken("}"); }
+        {
+            if (m_config.templateExprSpacing) { printToken("${ "); }
+            else { printToken("${"); }
+            node.m_expressions[i]->accept(*this);
+            if (m_config.templateExprSpacing) { printToken(" }"); }
+            else { printToken("}"); }
+        }
     }
     printToken("`");
 }
@@ -238,7 +248,7 @@ void JSFormatter::visitTypeAliasNode(TypeAliasNode& node)
     printToken("type");
     printSpace();
     printToken(node.m_name.c_str());
-    printToken(" = ");
+    printAssign();
     if (node.m_typeAnnotation != NULL) { node.m_typeAnnotation->accept(*this); }
     printSemicolonIfNeeded(&node);
     printNewline();
