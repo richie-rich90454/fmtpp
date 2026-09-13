@@ -19,6 +19,9 @@ public:
     /** @see ASTNode::accept */
     virtual void accept(ASTVisitor& visitor);
 
+    /** @see ASTNode::isReturnStmt */
+    virtual bool isReturnStmt() const { return true; }
+
     /** Optional return value expression. */
     ASTNode* m_argument;
 
