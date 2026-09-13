@@ -94,6 +94,14 @@ private:
     /** Count of double-quoted strings. */
     int m_doubleQuoteCount;
 
+    /** `{x` / `x}` tight curlies vs `{ x` / `x }` spaced. */
+    int m_curlyTightCount;
+    int m_curlySpacedCount;
+
+    /** `[x` / `x]` tight squares vs `[ x` / `x ]` spaced. */
+    int m_squareTightCount;
+    int m_squareSpacedCount;
+
     /** Count of same-line braces. */
     int m_sameLineBraceCount;
 
@@ -105,6 +113,103 @@ private:
 
     /** Count of spaces used for indentation. */
     int m_spaceIndentCount;
+
+    /** Scan one trimmed code line for spacing signals. */
+    void scanCodeLine(const char* d, size_t start, size_t end);
+
+    /** `,x` vs `, x` after commas. */
+    int m_commaTightCount;
+    int m_commaSpacedCount;
+
+    /** `(x` / `x)` tight parens vs `( x` / `x )` spaced. */
+    int m_parenTightCount;
+    int m_parenSpacedCount;
+
+    /** Control parens `if(x` vs `if( x` (if/for/while/switch/catch). */
+    int m_condParenTightCount;
+    int m_condParenSpacedCount;
+
+    /** Single arrow params with parens `(x) =>` vs bare `x =>`. */
+    int m_arrowParenCount;
+    int m_bareArrowParamCount;
+
+    /** `=>` tight vs spaced. */
+    int m_arrowTightCount;
+    int m_arrowSpacedCount;
+
+    /** `${x` vs `${ x` in template literals. */
+    int m_templateTightCount;
+    int m_templateSpacedCount;
+
+    /** Non-empty lines ending with a comma. */
+    int m_trailingCommaLineCount;
+    /** Non-empty lines not ending with a comma. */
+    int m_noTrailingCommaLineCount;
+
+    /** Tag opens split across lines (`<tag` ... attrs). */
+    int m_multilineTagCount;
+    /** Tag opens closed on one line. */
+    int m_singleLineTagCount;
+
+    /** Longest blank-line run seen (in newlines). */
+    int m_maxBlankRun;
+
+    /** Blank line right after an import-ish line or not. */
+    int m_blankAfterImportCount;
+    int m_noBlankAfterImportCount;
+
+    /** `=` with spaces both sides vs tight. */
+    int m_assignSpacedCount;
+    int m_assignTightCount;
+
+    /** `:` followed by space vs glued (skips `::`). */
+    int m_colonSpacedCount;
+    int m_colonTightCount;
+
+    /** `name (` vs `name(` before parens (non-keywords). */
+    int m_funcSpaceCount;
+    int m_funcTightCount;
+
+    /** `){` vs `) {` before braces. */
+    int m_braceTightCount;
+    int m_braceSpacedCount;
+
+    /** `if(` vs `if (` after control keywords. */
+    int m_keywordTightCount;
+    int m_keywordSpacedCount;
+
+    /** `} else` / `} catch` / `} finally` joined vs split. */
+    int m_elseJoinedCount;
+    int m_elseSplitCount;
+    int m_catchJoinedCount;
+    int m_catchSplitCount;
+    int m_finallyJoinedCount;
+    int m_finallySplitCount;
+
+    /** `elseif` occurrences (joining would rewrite the keyword). */
+    int m_elseifCount;
+    /** `else if` occurrences. */
+    int m_elseIfCount;
+
+    /** Blank line before `return` lines or not. */
+    int m_blankBeforeReturnCount;
+    int m_noBlankBeforeReturnCount;
+
+    /** First line empty or not. */
+    int m_leadingBlankCount;
+
+    /** File ends with a newline or not. */
+    int m_finalNewlineCount;
+    int m_noFinalNewlineCount;
+
+    /** File starts with a UTF-8 BOM. */
+    int m_bomCount;
+
+    /** Lines holding exactly `{}`. */
+    int m_inlineEmptyCount;
+
+    /** Split empty blocks (`{` line then `}` line). */
+    int m_splitEmptyCount;
 
     /** Detected indentation width. */
     int m_detectedTabWidth;
